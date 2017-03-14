@@ -1,17 +1,19 @@
 package main
 
-import "fmt"
-import "path"
-import "io/ioutil"
-import "regexp"
+import (
+	"fmt"
+	"io/ioutil"
+	"path"
+	"regexp"
 
-import "github.com/Jeffail/gabs"
+	"github.com/Jeffail/gabs"
+)
 
 var NameRegex = regexp.MustCompile("^\\w+$")
 
 type LauncherConfig struct {
 	data      *gabs.Container
-	filename   string
+	filename  string
 	nameRegex *regexp.Regexp
 }
 
@@ -36,9 +38,9 @@ func (lc *LauncherConfig) CreateProfile(name string, version string) error {
 		return fmt.Errorf("Invalid profile name: %d", name)
 	}
 	path := "profiles." + name
-	lc.data.SetP(name, path + ".name")
-	lc.data.SetP(version, path + ".lastVersionId")
-	lc.data.SetP(MinecraftDir() + "." + name, path + ".gameDir")
+	lc.data.SetP(name, path+".name")
+	lc.data.SetP(version, path+".lastVersionId")
+	lc.data.SetP(MinecraftDir()+"."+name, path+".gameDir")
 	return nil
 }
 

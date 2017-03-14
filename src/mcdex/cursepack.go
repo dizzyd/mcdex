@@ -2,13 +2,12 @@ package main
 
 import (
 	"archive/zip"
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type CurseManifest struct {
@@ -60,6 +59,14 @@ func NewCursePack(name string, url string) (*CursePack, error) {
 }
 
 func (cp *CursePack) download() error {
+	// If the pack.zip file already exists, shortcut out
+	packFilename := filepath.Join(cp.path, "pack.zip")
+	if _, err := os.Stat(packFilename); os.IsExist(err) {
+		return nil
+	}
+
+	fmt.Printf("Starting download of modpack: %s\n", cp.url)
+
 	// Start the download
 	resp, err := HttpGet(cp.url)
 	if err != nil {
@@ -67,21 +74,8 @@ func (cp *CursePack) download() error {
 	}
 	defer resp.Body.Close()
 
-	// Open pack.zip in the working dir
-	packFile, err := os.Create(filepath.Join(cp.path, "pack.zip"))
-	if err != nil {
-		return fmt.Errorf("Failed to create %s/pack.zip: %v", cp.name, err)
-	}
-	defer packFile.Close()
-
-	writer := bufio.NewWriter(packFile)
-	_, err = io.Copy(writer, resp.Body)
-	if err != nil {
-		return fmt.Errorf("Failed to write %s/pack.zip: %v", cp.name, err)
-	}
-	writer.Flush()
-
-	return nil
+	// Store pack.zip in the working dir
+	return writeStream(packFilename, resp.Body)
 }
 
 func (cp *CursePack) processManifest() error {
@@ -91,6 +85,8 @@ func (cp *CursePack) processManifest() error {
 		return fmt.Errorf("Failed to open pack.zip: %v", err)
 	}
 	defer pack.Close()
+
+	fmt.Printf("Processing manifest..\n")
 
 	// Find the manifest file (manifest.json)
 	for _, f := range pack.File {
@@ -130,18 +126,26 @@ func (cp *CursePack) processManifest() error {
 func (cp *CursePack) createLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
 	// version of forge with the appropriate version
+	minecraftVsn := cp.manifest.Config.Version
+	forgeVsn := cp.manifest.Config.ModLoaders[0].Id
 
-	// If we can't find right version of forge, download the installer
-	// - Open the installer.jar and look for install_profile.json
-	// - Create version entry under versions/<version>/<version>.json
-	// - Put universal.jar into forge/<version>/<version>.jar
+	// Strip the "forge-"" prefix off the version string
+	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
 
-	// Create the directory for this pack
+	// Install forge if necessary
+	if !isForgeInstalled(minecraftVsn, forgeVsn) {
+		err := installForge(minecraftVsn, forgeVsn)
+		if err != nil {
+			return fmt.Errorf("failed to install Forge %s: %+v", forgeVsn, err)
+		}
+	}
 
 	// Finally, load the launcher_profiles.json and make a new entry
 	// with appropriate name and reference to our pack directory and forge version
+	return nil
 }
 
 func (cp *CursePack) installMods() error {
 	// Using manifest, download each mod file into pack directory
+	return nil
 }

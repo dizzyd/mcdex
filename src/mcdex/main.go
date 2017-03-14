@@ -7,17 +7,17 @@ import (
 	"os"
 )
 
-type Command struct {
+type command struct {
 	Fn    func() error
 	Usage string
 }
 
-var COMMANDS = map[string]Command{
-	"installPack": Command{
+var gCommands = map[string]command{
+	"installPack": command{
 		Fn:    cmdInstallPack,
 		Usage: "Install a mod pack",
 	},
-	"update": Command{
+	"update": command{
 		Fn:    cmdUpdate,
 		Usage: "Download latest index",
 	},
@@ -36,10 +36,10 @@ func cmdInstallPack() error {
 	}
 
 	// Download the pack
-	// err = cp.download()
-	// if err != nil {
-	// 	return err
-	// }
+	err = cp.download()
+	if err != nil {
+		return err
+	}
 
 	fmt.Printf("Processing manifest!\n")
 
@@ -50,11 +50,6 @@ func cmdInstallPack() error {
 	}
 
 	// Create launcher profile
-	err = cp.createLauncherProfile()
-	if err != nil {
-		return err
-	}
-	// Download JARs
 	err = cp.createLauncherProfile()
 	if err != nil {
 		return err
@@ -82,7 +77,7 @@ func usage() {
 	// console(" options:\n")
 	// flag.PrintDefaults()
 	console(" commands:\n")
-	for id, cmd := range COMMANDS {
+	for id, cmd := range gCommands {
 		console(" - %s: %s\n", id, cmd.Usage)
 	}
 }
@@ -97,7 +92,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	command, exists := COMMANDS[flag.Arg(0)]
+	command, exists := gCommands[flag.Arg(0)]
 	if !exists {
 		console("ERROR: unknown command '%s'\n", flag.Arg(0))
 		usage()
