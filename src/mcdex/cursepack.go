@@ -2,51 +2,25 @@ package main
 
 import (
 	"archive/zip"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Jeffail/gabs"
 )
-
-type CurseManifest struct {
-	ManifestType    string
-	ManifestVersion int
-	Name            string
-	Version         string
-	Description     string
-	Files           []CurseManifestFile
-	Overrides       string
-	Config          CurseMinecraftInfo `json:"minecraft"`
-}
-
-type CurseMinecraftInfo struct {
-	Version    string
-	ModLoaders []CurseModLoader
-}
-
-type CurseModLoader struct {
-	Id      string
-	Primary bool
-}
-
-type CurseManifestFile struct {
-	ProjectID int
-	FileID    int
-}
 
 type CursePack struct {
 	name     string
 	url      string
 	path     string
-	manifest *CurseManifest
+	manifest *gabs.Container
 }
 
 func NewCursePack(name string, url string) (*CursePack, error) {
 	cp := new(CursePack)
 	cp.name = name
-	cp.path = filepath.Join(McdexDir(), "pack", name)
+	cp.path = filepath.Join(env().McdexDir, "pack", name)
 	cp.url = url
 
 	// Create the directory
@@ -86,55 +60,41 @@ func (cp *CursePack) processManifest() error {
 	}
 	defer pack.Close()
 
-	fmt.Printf("Processing manifest..\n")
-
-	// Find the manifest file (manifest.json)
-	for _, f := range pack.File {
-		if f.Name == "manifest.json" {
-			reader, err := f.Open()
-			if err != nil {
-				return fmt.Errorf("Failed to open manifest.json: %v", err)
-			}
-
-			buf := new(bytes.Buffer)
-			_, err = buf.ReadFrom(reader)
-			if err != nil {
-				return fmt.Errorf("Failed to load manifest.json into memory: %v", err)
-			}
-
-			manifest := new(CurseManifest)
-			err = json.Unmarshal(buf.Bytes(), manifest)
-			if err != nil {
-				return fmt.Errorf("Failed to unmarshal manifest.json: %+v", err)
-			}
-
-			// Validate that the manifest matches our expected version
-			if manifest.ManifestType != "minecraftModpack" || manifest.ManifestVersion != 1 {
-				return fmt.Errorf("Unexpected manifest type: %s v.%d", manifest.ManifestType, manifest.ManifestVersion)
-			}
-
-			// Save manifeset to our current pack
-			cp.manifest = manifest
-			return nil
-		}
+	// Find the manifest file and decode it
+	cp.manifest, err = findJSONFile(pack, "manifest.json")
+	if err != nil {
+		return err
 	}
 
-	// If we reached this point, no manifest was found
-	return fmt.Errorf("Failed to find a manifest.json")
+	// Check the type and version of the manifest
+	fmt.Printf("mvsn: %s\n", cp.manifest.Path("manifestVersion"))
+	mvsn := cp.manifest.Path("manifestVersion").Data().(float64)
+	if mvsn != 1.0 {
+		return fmt.Errorf("unexpected manifest version: %4.0f", mvsn)
+	}
+
+	mtype, ok := cp.manifest.Path("manifestType").Data().(string)
+	if !ok || mtype != "minecraftModpack" {
+		return fmt.Errorf("unexpected manifest type: %s", mtype)
+	}
+
+	return nil
 }
 
 func (cp *CursePack) createLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
 	// version of forge with the appropriate version
-	minecraftVsn := cp.manifest.Config.Version
-	forgeVsn := cp.manifest.Config.ModLoaders[0].Id
+	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
+	forgeVsn := cp.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
 
 	// Strip the "forge-"" prefix off the version string
 	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
+	var forgeID string
+	var err error
 
 	// Install forge if necessary
 	if !isForgeInstalled(minecraftVsn, forgeVsn) {
-		err := installForge(minecraftVsn, forgeVsn)
+		forgeID, err = installForge(minecraftVsn, forgeVsn)
 		if err != nil {
 			return fmt.Errorf("failed to install Forge %s: %+v", forgeVsn, err)
 		}
@@ -142,6 +102,15 @@ func (cp *CursePack) createLauncherProfile() error {
 
 	// Finally, load the launcher_profiles.json and make a new entry
 	// with appropriate name and reference to our pack directory and forge version
+	lc, err := newLauncherConfig()
+	if err != nil {
+		return fmt.Errorf("failed to load launcher_profiles.json: %+v", err)
+	}
+
+	fmt.Printf("Creating profile: %s\n", cp.name)
+	lc.createProfile(cp.name, forgeID, cp.path)
+	lc.save()
+
 	return nil
 }
 

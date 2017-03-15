@@ -21,6 +21,10 @@ var gCommands = map[string]command{
 		Fn:    cmdUpdate,
 		Usage: "Download latest index",
 	},
+	"info": command{
+		Fn:    cmdInfo,
+		Usage: "Show runtime info",
+	},
 }
 
 func cmdInstallPack() error {
@@ -68,6 +72,11 @@ func cmdUpdate() error {
 	return db.Download()
 }
 
+func cmdInfo() error {
+	fmt.Printf("Env: %+v\n", env())
+	return nil
+}
+
 func console(f string, args ...interface{}) {
 	fmt.Printf(f, args...)
 }
@@ -83,9 +92,13 @@ func usage() {
 }
 
 func main() {
-	// Make sure the mcdex directory exists
-	os.Mkdir(McdexDir(), 0700)
+	// Initialize our environment
+	err := initEnv()
+	if err != nil {
+		log.Fatalf("Failed to initialize: %s\n", err)
+	}
 
+	// Process command-line args
 	flag.Parse()
 	if !flag.Parsed() || flag.NArg() < 1 {
 		usage()
@@ -99,7 +112,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	err := command.Fn()
+	err = command.Fn()
 	if err != nil {
 		log.Fatalf("%+v\n", err)
 	}

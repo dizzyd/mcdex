@@ -11,15 +11,15 @@ import (
 
 var NameRegex = regexp.MustCompile("^\\w+$")
 
-type LauncherConfig struct {
+type launcherConfig struct {
 	data      *gabs.Container
 	filename  string
 	nameRegex *regexp.Regexp
 }
 
-func NewLauncherConfig() (*LauncherConfig, error) {
-	lc := new(LauncherConfig)
-	lc.filename = path.Join(MinecraftDir(), "launcher_profiles.json")
+func newLauncherConfig() (*launcherConfig, error) {
+	lc := new(launcherConfig)
+	lc.filename = path.Join(env().MinecraftDir, "launcher_profiles.json")
 
 	rawdata, err := ioutil.ReadFile(lc.filename)
 	if err != nil {
@@ -33,17 +33,17 @@ func NewLauncherConfig() (*LauncherConfig, error) {
 	return lc, nil
 }
 
-func (lc *LauncherConfig) CreateProfile(name string, version string) error {
+func (lc *launcherConfig) createProfile(name, version, gameDir string) error {
 	if !NameRegex.MatchString(name) {
-		return fmt.Errorf("Invalid profile name: %d", name)
+		return fmt.Errorf("invalid profile name: %s", name)
 	}
 	path := "profiles." + name
 	lc.data.SetP(name, path+".name")
 	lc.data.SetP(version, path+".lastVersionId")
-	lc.data.SetP(MinecraftDir()+"."+name, path+".gameDir")
+	lc.data.SetP(gameDir, path+".gameDir")
 	return nil
 }
 
-func (lc *LauncherConfig) Save() error {
+func (lc *launcherConfig) save() error {
 	return ioutil.WriteFile(lc.filename, lc.data.Bytes(), 0644)
 }

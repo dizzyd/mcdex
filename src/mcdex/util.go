@@ -8,9 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/user"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -37,20 +34,23 @@ func HttpGet(url string) (*http.Response, error) {
 	return client.Get(url)
 }
 
-func MinecraftDir() string {
-	user, _ := user.Current()
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(user.HomeDir, "Library", "Application Support", "minecraft")
-	case "windows":
-		return filepath.Join(os.Getenv("APPDATA"), ".minecraft")
-	default:
-		return filepath.Join(user.HomeDir, ".minecraft")
-	}
-}
+func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {
+	for _, f := range z.File {
+		if f.Name == name {
+			freader, err := f.Open()
+			if err != nil {
+				return nil, err
+			}
 
-func McdexDir() string {
-	return filepath.Join(MinecraftDir(), "mcdex")
+			json, err := gabs.ParseJSONBuffer(freader)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse JSON %s: %+v", name, err)
+			}
+			return json, nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to find %s", name)
 }
 
 func zipEntryToJSON(name string, f *zip.File) (*gabs.Container, error) {
@@ -85,4 +85,14 @@ func writeStream(filename string, data io.Reader) error {
 	}
 	writer.Flush()
 	return nil
+}
+
+func fileExists(filename string) bool {
+	_, err := os.Stat(filename)
+	return err == nil || os.IsExist(err)
+}
+
+func dirExists(dirname string) bool {
+	stat, err := os.Stat(dirname)
+	return err == nil && stat.IsDir()
 }

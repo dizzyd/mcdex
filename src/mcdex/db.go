@@ -23,7 +23,7 @@ type Database struct {
 func NewDatabase() (*Database, error) {
 	db := new(Database)
 
-	db.sqlDbPath = filepath.Join(McdexDir(), "mcdex.dat")
+	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
 
 	sqlDb, err := sql.Open("sqlite3", db.sqlDbPath)
 	if err != nil {
@@ -56,7 +56,7 @@ func (db *Database) Download() error {
 	defer res.Body.Close()
 
 	// Stream the data file to mcdex.dat.tmp
-	tmpFileName := filepath.Join(McdexDir(), "mcdex.dat.tmp")
+	tmpFileName := filepath.Join(env().McdexDir, "mcdex.dat.tmp")
 	tmpFile, err := os.Create(tmpFileName)
 	if err != nil {
 		return fmt.Errorf("Failed to create mcdex.dat.tmp: %+v", err)
@@ -86,7 +86,7 @@ func (db *Database) Download() error {
 	}
 
 	// Close the database and rename the tmp file
-	err = os.Rename(tmpFileName, filepath.Join(McdexDir(), "mcdex.dat"))
+	err = os.Rename(tmpFileName, filepath.Join(env().McdexDir, "mcdex.dat"))
 	if err != nil {
 		return fmt.Errorf("Failed to rename mcdex.dat.tmp: %+v", err)
 	}
