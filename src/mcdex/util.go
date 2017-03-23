@@ -11,27 +11,52 @@ import (
 	"strings"
 	"time"
 
+	"net/url"
+
 	"github.com/Jeffail/gabs"
 	"github.com/viki-org/dnscache"
 )
 
 var resolver = dnscache.New(time.Minute * 15)
+var getterClient = NewHttpClient(true)
+var redirectClient = NewHttpClient(false)
 
-func NewHttpClient() http.Client {
-	return http.Client{
-		Transport: &http.Transport{
-			Dial: func(network string, address string) (net.Conn, error) {
-				separator := strings.LastIndex(address, ":")
-				ip, _ := resolver.FetchOneString(address[:separator])
-				return net.Dial("tcp", ip+address[separator:])
-			},
+func NewHttpClient(followRedirects bool) http.Client {
+	t := &http.Transport{
+		Dial: func(network string, address string) (net.Conn, error) {
+			separator := strings.LastIndex(address, ":")
+			ip, _ := resolver.FetchOneString(address[:separator])
+			return net.Dial("tcp", ip+address[separator:])
 		},
 	}
+
+	if !followRedirects {
+		return http.Client{Transport: t, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+	}
+	return http.Client{Transport: t}
+
 }
 
 func HttpGet(url string) (*http.Response, error) {
-	client := NewHttpClient()
-	return client.Get(url)
+	return getterClient.Get(url)
+}
+
+func getRedirectURL(url string) (*url.URL, error) {
+	resp, err := redirectClient.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP error on %s: %+v", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 301 || resp.StatusCode == 302 {
+		u, err := resp.Location()
+		if err != nil {
+			return nil, fmt.Errorf("invalid location url: %+v", err)
+		}
+		return u, nil
+	}
+
+	return nil, nil
 }
 
 func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {
@@ -72,18 +97,31 @@ func zipEntryToJSON(name string, f *zip.File) (*gabs.Container, error) {
 }
 
 func writeStream(filename string, data io.Reader) error {
-	f, err := os.Create(filename)
+	// Construct a filename to hold the stream while writing; once the download is complete, we'll move it into place
+	// and delete the temporary file. This ensures that partial/failed streams are properly detected.
+	tempFilename := filename + ".part"
+
+	// Create the temporary file
+	f, err := os.Create(tempFilename)
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %v", filename, err)
 	}
 	defer f.Close()
 
+	// Stream the data into the temp file
 	writer := bufio.NewWriter(f)
 	_, err = io.Copy(writer, data)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %v", filename, err)
 	}
 	writer.Flush()
+
+	// Ok, write completed successfully, move the file
+	err = os.Rename(tempFilename, filename)
+	if err != nil {
+		return fmt.Errorf("failed to rename %s: %+v", tempFilename, err)
+	}
+
 	return nil
 }
 

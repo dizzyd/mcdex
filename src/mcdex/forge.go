@@ -20,19 +20,27 @@ import (
 	"github.com/xi2/xz"
 )
 
+func forgeIDStr(minecraftVsn, forgeVsn string) string {
+	return minecraftVsn + "-forge-" + forgeVsn
+}
+
 func isForgeInstalled(minecraftVsn, forgeVsn string) bool {
-	id := minecraftVsn + "-" + forgeVsn
-	forgeDir := filepath.Join(env().MinecraftDir, "versions", id)
-	_, err := os.Stat(forgeDir)
-	return os.IsExist(err)
+	forgeDir := filepath.Join(env().MinecraftDir, "versions", forgeIDStr(minecraftVsn, forgeVsn))
+	return dirExists(forgeDir)
 }
 
 func installForge(minecraftVsn, forgeVsn string) (string, error) {
+	// If this version of forge is already installed, exit early
+	if isForgeInstalled(minecraftVsn, forgeVsn) {
+		fmt.Printf("Forge %s already available.\n", forgeVsn)
+		return forgeIDStr(minecraftVsn, forgeVsn), nil
+	}
+
 	// Construct the download URL
 	forgeURL := fmt.Sprintf("http://files.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar",
 		minecraftVsn, forgeVsn, minecraftVsn, forgeVsn)
 
-	fmt.Printf("Downloading Forge %s: %s\n", forgeVsn, forgeURL)
+	fmt.Printf("Downloading Forge %s\n", forgeVsn)
 
 	// Download the Forge installer (into memory)
 	resp, err := HttpGet(forgeURL)
@@ -40,8 +48,6 @@ func installForge(minecraftVsn, forgeVsn string) (string, error) {
 		return "", fmt.Errorf("failed to download Forge %s: %+v", forgeVsn, err)
 	}
 	defer resp.Body.Close()
-
-	fmt.Printf("Response: %+v\n", resp)
 
 	installerBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -54,12 +60,10 @@ func installForge(minecraftVsn, forgeVsn string) (string, error) {
 		return "", err
 	}
 
-	// From the install_profile.json, get the ID we should use for this install
-	fmt.Printf("%+v\n", installProfile)
-	forgeID, ok := installProfile.Path("versionInfo.id").Data().(string)
-	if !ok {
-		return "", fmt.Errorf("failed to find versionInfo.id in Forge %s", forgeVsn)
-	}
+	// Fix up the versionInfo.id in the profile to use the correct ID
+	// (Forge uses a weird repeating version by default)
+	forgeID := forgeIDStr(minecraftVsn, forgeVsn)
+	installProfile.SetP(forgeID, "versionInfo.id")
 
 	// Create the versions/ registry directory
 	forgeDir := filepath.Join(env().MinecraftDir, "versions", forgeID)

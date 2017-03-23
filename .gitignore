@@ -26,3 +26,5 @@ _testmain.go
 # Govendor cache
 .cache
 src/mcdex-*
+bin
+pkg

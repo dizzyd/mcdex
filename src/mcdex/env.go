@@ -34,6 +34,7 @@ func initEnv() error {
 	if javaDir == "" {
 		return fmt.Errorf("missing Java directory")
 	}
+	fmt.Printf("Java found in %s\n", javaDir)
 
 	envData = envConsts{
 		MinecraftDir: mcDir,
@@ -113,7 +114,6 @@ func _executableExt() string {
 
 func _javaExists(dir string) bool {
 	name := filepath.Join(dir, "bin", "java"+_executableExt())
-	fmt.Printf("Java exists in %s: %t\n", name, fileExists(name))
 	return fileExists(name)
 }
 

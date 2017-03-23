@@ -45,8 +45,6 @@ func cmdInstallPack() error {
 		return err
 	}
 
-	fmt.Printf("Processing manifest!\n")
-
 	// Process manifest
 	err = cp.processManifest()
 	if err != nil {
@@ -59,7 +57,18 @@ func cmdInstallPack() error {
 		return err
 	}
 
+	// Install plugins
+	err = cp.installMods()
+	if err != nil {
+		return err
+	}
+
 	// Install overrides
+	err = cp.installOverrides()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
