@@ -201,6 +201,11 @@ func (cp *CursePack) installOverrides() error {
 		// Make sure the directory for the file exists
 		os.MkdirAll(filepath.Dir(filename), 0700)
 
+		if f.FileInfo().IsDir() {
+			fmt.Printf("Skipping dir: %s\n", f.Name)
+			continue
+		}
+
 		freader, err := f.Open()
 		if err != nil {
 			return fmt.Errorf("failed to open %s: %+v", f.Name, err)
