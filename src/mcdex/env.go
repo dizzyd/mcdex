@@ -82,11 +82,8 @@ func _findJavaDir(mcdir string) string {
 	switch runtime.GOOS {
 	case "windows":
 		whichJavaCmd = exec.Command("where", "java")
-	case "linux":
-	case "darwin":
-		whichJavaCmd = exec.Command("sh", "-c", "which java")
 	default:
-		break
+		whichJavaCmd = exec.Command("sh", "-c", "which java")
 	}
 
 	if whichJavaCmd != nil {

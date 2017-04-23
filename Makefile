@@ -1,7 +1,7 @@
 
 APPS := mcdex
 
-DOCKER_ARGS := -v $(shell pwd)/bin/docker:/mcdex/bin -w /mcdex mingw
+DOCKER_ARGS := -v $(shell pwd)/bin/docker:/mcdex/bin -w /mcdex mcdex
 
 all:
 	go install $(APPS)
@@ -19,10 +19,13 @@ linux:
 docker: docker.windows docker.linux
 
 docker.init:
-	docker build -t mingw -f Dockerfile .
+	docker build -t mcdex -f Dockerfile .
 
 docker.windows: docker.init
 	docker run $(DOCKER_ARGS) make windows
 
 docker.linux: docker.init
 	docker run $(DOCKER_ARGS) make linux
+
+docker.shell: docker.init
+	docker run -ti $(DOCKER_ARGS) /bin/bash
