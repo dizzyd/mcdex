@@ -13,6 +13,10 @@ type command struct {
 }
 
 var gCommands = map[string]command{
+	"createPack": command{
+		Fn:    cmdCreatePack,
+		Usage: "Create a new mod pack",
+	},
 	"installPack": command{
 		Fn:    cmdInstallPack,
 		Usage: "Install a mod pack",
@@ -25,6 +29,44 @@ var gCommands = map[string]command{
 		Fn:    cmdInfo,
 		Usage: "Show runtime info",
 	},
+	"registerMod": command{
+		Fn:    cmdRegisterMod,
+		Usage: "Register a curseforge mod with an existing pack",
+	},
+	"registerExtMod": command{
+		Fn:    cmdRegisterExtMod,
+		Usage: "Register an externally-hosted mod with an existing pack",
+	},
+	"installMods": command{
+		Fn:    cmdInstallMods,
+		Usage: "Install all mods using the manifest",
+	},
+}
+
+func cmdCreatePack() error {
+	if flag.NArg() < 4 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	// Create a new pack directory
+	cp, err := NewCursePack(flag.Arg(1), "")
+	if err != nil {
+		return err
+	}
+
+	// Create the manifest for this new pack
+	err = cp.createManifest(flag.Arg(1), flag.Arg(2), flag.Arg(3))
+	if err != nil {
+		return err
+	}
+
+	// Create the launcher profile (and install forge if necessary)
+	err = cp.createLauncherProfile()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func cmdInstallPack() error {
@@ -86,6 +128,60 @@ func cmdInfo() error {
 	return nil
 }
 
+func cmdInstallMods() error {
+	if flag.NArg() < 1 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	cp, err := OpenCursePack(flag.Arg(1))
+	if err != nil {
+		return err
+	}
+
+	err = cp.installMods()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func cmdRegisterMod() error {
+	if flag.NArg() < 1 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	cp, err := OpenCursePack(flag.Arg(1))
+	if err != nil {
+		return err
+	}
+
+	err = cp.registerMod(flag.Arg(2))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func cmdRegisterExtMod() error {
+	if flag.NArg() < 4 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	cp, err := OpenCursePack(flag.Arg(1))
+	if err != nil {
+		return err
+	}
+
+	err = cp.registerExtMod(flag.Arg(2), flag.Arg(3))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func console(f string, args ...interface{}) {
 	fmt.Printf(f, args...)
 }
@@ -101,17 +197,17 @@ func usage() {
 }
 
 func main() {
-	// Initialize our environment
-	err := initEnv()
-	if err != nil {
-		log.Fatalf("Failed to initialize: %s\n", err)
-	}
-
 	// Process command-line args
 	flag.Parse()
 	if !flag.Parsed() || flag.NArg() < 1 {
 		usage()
 		os.Exit(-1)
+	}
+
+	// Initialize our environment
+	err := initEnv()
+	if err != nil {
+		log.Fatalf("Failed to initialize: %s\n", err)
 	}
 
 	command, exists := gCommands[flag.Arg(0)]
