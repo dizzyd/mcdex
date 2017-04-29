@@ -19,11 +19,9 @@ type envConsts struct {
 var envData envConsts
 
 func initEnv() error {
-	// Get the minecraft directory, based on platform we're running on
+	// Get the minecraft directory, based on platform
 	mcDir := _minecraftDir()
-	if !dirExists(mcDir) {
-		return fmt.Errorf("missing Minecraft directory")
-	}
+	os.Mkdir(mcDir, 0700)
 
 	// Get the mcdex directory, create if necessary
 	mcdexDir := filepath.Join(mcDir, "mcdex")
@@ -34,7 +32,6 @@ func initEnv() error {
 	if javaDir == "" {
 		return fmt.Errorf("missing Java directory")
 	}
-	fmt.Printf("Java found in %s\n", javaDir)
 
 	envData = envConsts{
 		MinecraftDir: mcDir,

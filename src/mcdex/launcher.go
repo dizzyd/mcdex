@@ -20,15 +20,18 @@ type launcherConfig struct {
 func newLauncherConfig() (*launcherConfig, error) {
 	lc := new(launcherConfig)
 	lc.filename = path.Join(env().MinecraftDir, "launcher_profiles.json")
+	lc.data = gabs.New()
 
-	rawdata, err := ioutil.ReadFile(lc.filename)
-	if err != nil {
-		return nil, err
-	}
+	if fileExists(lc.filename) {
+		rawdata, err := ioutil.ReadFile(lc.filename)
+		if err != nil {
+			return nil, err
+		}
 
-	lc.data, err = gabs.ParseJSON(rawdata)
-	if err != nil {
-		return nil, err
+		lc.data, err = gabs.ParseJSON(rawdata)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return lc, nil
 }
