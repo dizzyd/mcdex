@@ -41,6 +41,10 @@ var gCommands = map[string]command{
 		Fn:    cmdInstallMods,
 		Usage: "Install all mods using the manifest",
 	},
+	"runServer": command{
+		Fn:    cmdRunServer,
+		Usage: "Run a minecraft server with an existing pack",
+	},
 }
 
 func cmdCreatePack() error {
@@ -182,6 +186,28 @@ func cmdRegisterExtMod() error {
 	return nil
 }
 
+func cmdRunServer() error {
+	if flag.NArg() < 2 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	// Open the pack
+	cp, err := OpenCursePack(flag.Arg(1))
+	if err != nil {
+		return err
+	}
+
+	// Install the server jar, forge and dependencies
+	err = cp.installServer()
+	if err != nil {
+		return err
+	}
+
+	return nil
+	// Setup the command-line
+	// java -jar <forge.jar>
+}
+
 func console(f string, args ...interface{}) {
 	fmt.Printf(f, args...)
 }
@@ -221,14 +247,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("%+v\n", err)
 	}
-
-	// lconfig, err := NewLauncherConfig()
-	// if err != nil {
-	// 	log.Fatalf("Failed to load launcher_profiles.json: %+v\n", err)
-	// }
-	// lconfig.CreateProfile("test", "1.10.2")
-	// lconfig.Save()
-	// fmt.Printf("%s", lconfig.data.StringIndent("", "  "))
 }
 
 //mcdex update - download latest mcdex.sqlite

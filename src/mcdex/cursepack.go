@@ -156,7 +156,7 @@ func (cp *CursePack) createLauncherProfile() error {
 	var err error
 
 	// Install forge if necessary
-	forgeID, err = installForge(minecraftVsn, forgeVsn)
+	forgeID, err = installClientForge(minecraftVsn, forgeVsn)
 	if err != nil {
 		return fmt.Errorf("failed to install Forge %s: %+v", forgeVsn, err)
 	}
@@ -391,6 +391,47 @@ func (cp *CursePack) installOverrides() error {
 		if err != nil {
 			return fmt.Errorf("failed to save: %+v", err)
 		}
+	}
+
+	return nil
+}
+
+func (cp *CursePack) installServer() error {
+	// Get the minecraft + forge versions from manifest
+	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
+	forgeVsn := cp.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
+
+	// Extract the version from manifest and setup a URL
+	filename := fmt.Sprintf("minecraft_server.%s.jar", minecraftVsn)
+	serverURL := fmt.Sprintf("https://s3.amazonaws.com/Minecraft.Download/versions/%s/%s", minecraftVsn, filename)
+	absFilename := filepath.Join(cp.path, filename)
+
+	// Only install if file isn't already present
+	if !fileExists(absFilename) {
+		// Download the file into root of the pack directory
+		resp, err := HttpGet(serverURL)
+		if err != nil {
+			return fmt.Errorf("failed to download server for %s: %+v", minecraftVsn, err)
+		}
+		defer resp.Body.Close()
+
+		// If we didn't get back a 200, bail
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("failed to download server %s status %d from %s", minecraftVsn, resp.StatusCode, serverURL)
+		}
+
+		// Save the stream of the response to the file
+		fmt.Printf("Downloading %s\n", filename)
+		err = writeStream(absFilename, resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to write %s: %+v", filename, err)
+		}
+	}
+
+	_, err := installServerForge(minecraftVsn, forgeVsn, cp.path)
+	if err != nil {
+		return fmt.Errorf("failed to install forge: %+v", err)
 	}
 
 	return nil
