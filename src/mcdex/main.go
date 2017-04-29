@@ -33,10 +33,6 @@ var gCommands = map[string]command{
 		Fn:    cmdRegisterMod,
 		Usage: "Register a curseforge mod with an existing pack",
 	},
-	"registerExtMod": command{
-		Fn:    cmdRegisterExtMod,
-		Usage: "Register an externally-hosted mod with an existing pack",
-	},
 	"installMods": command{
 		Fn:    cmdInstallMods,
 		Usage: "Install all mods using the manifest",
@@ -53,7 +49,7 @@ func cmdCreatePack() error {
 	}
 
 	// Create a new pack directory
-	cp, err := NewCursePack(flag.Arg(1), "")
+	cp, err := NewModPack(flag.Arg(1), "")
 	if err != nil {
 		return err
 	}
@@ -80,7 +76,7 @@ func cmdInstallPack() error {
 	}
 
 	// Get ZIP file
-	cp, err := NewCursePack(flag.Arg(1), flag.Arg(2))
+	cp, err := NewModPack(flag.Arg(1), flag.Arg(2))
 	if err != nil {
 		return err
 	}
@@ -137,7 +133,7 @@ func cmdInstallMods() error {
 		return fmt.Errorf("Insufficient arguments")
 	}
 
-	cp, err := OpenCursePack(flag.Arg(1))
+	cp, err := OpenModPack(flag.Arg(1))
 	if err != nil {
 		return err
 	}
@@ -151,34 +147,16 @@ func cmdInstallMods() error {
 }
 
 func cmdRegisterMod() error {
-	if flag.NArg() < 1 {
-		return fmt.Errorf("Insufficient arguments")
-	}
-
-	cp, err := OpenCursePack(flag.Arg(1))
-	if err != nil {
-		return err
-	}
-
-	err = cp.registerMod(flag.Arg(2))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func cmdRegisterExtMod() error {
 	if flag.NArg() < 4 {
 		return fmt.Errorf("Insufficient arguments")
 	}
 
-	cp, err := OpenCursePack(flag.Arg(1))
+	cp, err := OpenModPack(flag.Arg(1))
 	if err != nil {
 		return err
 	}
 
-	err = cp.registerExtMod(flag.Arg(2), flag.Arg(3))
+	err = cp.registerMod(flag.Arg(2), flag.Arg(3))
 	if err != nil {
 		return err
 	}
@@ -192,7 +170,7 @@ func cmdRunServer() error {
 	}
 
 	// Open the pack
-	cp, err := OpenCursePack(flag.Arg(1))
+	cp, err := OpenModPack(flag.Arg(1))
 	if err != nil {
 		return err
 	}

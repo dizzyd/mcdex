@@ -16,7 +16,7 @@ import (
 	"github.com/robertkrimen/otto"
 )
 
-type CursePack struct {
+type ModPack struct {
 	name     string
 	url      string
 	path     string
@@ -24,8 +24,8 @@ type CursePack struct {
 	manifest *gabs.Container
 }
 
-func NewCursePack(name string, url string) (*CursePack, error) {
-	cp := new(CursePack)
+func NewModPack(name string, url string) (*ModPack, error) {
+	cp := new(ModPack)
 	cp.name = name
 	cp.path = filepath.Join(env().McdexDir, "pack", name)
 	cp.modPath = filepath.Join(cp.path, "mods")
@@ -50,8 +50,8 @@ func NewCursePack(name string, url string) (*CursePack, error) {
 	return cp, nil
 }
 
-func OpenCursePack(name string) (*CursePack, error) {
-	cp := new(CursePack)
+func OpenModPack(name string) (*ModPack, error) {
+	cp := new(ModPack)
 	cp.name = name
 	cp.path = filepath.Join(env().McdexDir, "pack", name)
 	cp.modPath = filepath.Join(cp.path, "mods")
@@ -72,7 +72,7 @@ func OpenCursePack(name string) (*CursePack, error) {
 	return cp, nil
 }
 
-func (cp *CursePack) download() error {
+func (cp *ModPack) download() error {
 	// If the pack.zip file already exists, shortcut out
 	packFilename := filepath.Join(cp.path, "pack.zip")
 	if fileExists(packFilename) {
@@ -92,7 +92,7 @@ func (cp *CursePack) download() error {
 	return writeStream(packFilename, resp.Body)
 }
 
-func (cp *CursePack) processManifest() error {
+func (cp *ModPack) processManifest() error {
 	// Open the pack.zip and parse the manifest
 	pack, err := zip.OpenReader(filepath.Join(cp.path, "pack.zip"))
 	if err != nil {
@@ -120,7 +120,7 @@ func (cp *CursePack) processManifest() error {
 	return nil
 }
 
-func (cp *CursePack) createManifest(name, minecraftVsn, forgeVsn string) error {
+func (cp *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	// Create the manifest and set basic info
 	cp.manifest = gabs.New()
 	cp.manifest.SetP(minecraftVsn, "minecraft.version")
@@ -144,7 +144,7 @@ func (cp *CursePack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	return nil
 }
 
-func (cp *CursePack) createLauncherProfile() error {
+func (cp *ModPack) createLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
 	// version of forge with the appropriate version
 	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
@@ -175,7 +175,7 @@ func (cp *CursePack) createLauncherProfile() error {
 	return nil
 }
 
-func (cp *CursePack) installMods() error {
+func (cp *ModPack) installMods() error {
 	// Using manifest, download each mod file into pack directory from Curseforge
 	files, _ := cp.manifest.Path("files").Children()
 	for _, f := range files {
@@ -217,76 +217,83 @@ func (cp *CursePack) installMods() error {
 	return nil
 }
 
-func (cp *CursePack) registerMod(url string) error {
-	// Retrieve the URL (we assume it's a HTML webpage)
-	res, e := HttpGet(url)
-	if e != nil {
-		return fmt.Errorf("failed to get %s: %+v", url, e)
-	}
-	defer res.Body.Close()
-	doc, err := goquery.NewDocumentFromResponse(res)
-	if err != nil {
-		return fmt.Errorf("failed to parse %s: %+v", url, e)
-	}
+func (cp *ModPack) registerMod(name, url string) error {
+	// If the URL doesn't contain minecraft.curseforge.com, assume we're only being given
+	// the URL and a tagname (to be registered in extfiles)
+	if strings.Contains(url, "minecraft.curseforge.com") {
+		// Insert the url by name into extfiles map
+		cp.manifest.Set(url, "extfiles", name)
+	} else {
+		// Retrieve the URL (we assume it's a HTML webpage)
+		res, e := HttpGet(url)
+		if e != nil {
+			return fmt.Errorf("failed to get %s: %+v", url, e)
+		}
+		defer res.Body.Close()
+		doc, err := goquery.NewDocumentFromResponse(res)
+		if err != nil {
+			return fmt.Errorf("failed to parse %s: %+v", url, e)
+		}
 
-	// Extract the description of this mod file for addition to manifest
-	desc, _ := doc.Find("meta[property='og:description']").Attr("content")
+		// Extract the description of this mod file for addition to manifest
+		desc, _ := doc.Find("meta[property='og:description']").Attr("content")
 
-	// Setup a JS VM and run the HTML through it; we want to process any
-	// script sections in the head so we can extract Elerium meta-data
-	vm := otto.New()
-	vm.Run("Elerium = {}; Elerium.ProjectFileDetails = {}")
-	doc.Find("head script").Each(func(i int, sel *goquery.Selection) {
-		vm.Run(sel.Text())
-	})
+		// Setup a JS VM and run the HTML through it; we want to process any
+		// script sections in the head so we can extract Elerium meta-data
+		vm := otto.New()
+		vm.Run("Elerium = {}; Elerium.ProjectFileDetails = {}")
+		doc.Find("head script").Each(func(i int, sel *goquery.Selection) {
+			vm.Run(sel.Text())
+		})
 
-	// Convert the Elerium data into JSON, then a string to get it out the VM
-	data, err := vm.Run("JSON.stringify(Elerium.ProjectFileDetails)")
-	if err != nil {
-		return fmt.Errorf("failed to extract project file details: %+v", err)
-	}
+		// Convert the Elerium data into JSON, then a string to get it out the VM
+		data, err := vm.Run("JSON.stringify(Elerium.ProjectFileDetails)")
+		if err != nil {
+			return fmt.Errorf("failed to extract project file details: %+v", err)
+		}
 
-	// Reparse from string into JSON (blech)
-	dataStr, _ := data.ToString()
-	projectDetails, _ := gabs.ParseJSON([]byte(dataStr))
+		// Reparse from string into JSON (blech)
+		dataStr, _ := data.ToString()
+		projectDetails, _ := gabs.ParseJSON([]byte(dataStr))
 
-	// Make sure files entry exists in manifest
-	if !cp.manifest.Exists("files") {
-		cp.manifest.ArrayOfSizeP(0, "files")
-	}
+		// Make sure files entry exists in manifest
+		if !cp.manifest.Exists("files") {
+			cp.manifest.ArrayOfSizeP(0, "files")
+		}
 
-	projectID := projectDetails.S("projectID").Data().(string)
-	fileID := projectDetails.S("projectFileID").Data().(string)
+		projectID := projectDetails.S("projectID").Data().(string)
+		fileID := projectDetails.S("projectFileID").Data().(string)
 
-	// We should now have the project & file IDs; add them to the manifest and
-	// save it
-	modInfo := make(map[string]interface{})
-	modInfo["projectID"], _ = strconv.Atoi(projectID)
-	modInfo["fileID"], _ = strconv.Atoi(fileID)
-	modInfo["required"] = true
-	modInfo["desc"] = desc
+		// We should now have the project & file IDs; add them to the manifest and
+		// save it
+		modInfo := make(map[string]interface{})
+		modInfo["projectID"], _ = strconv.Atoi(projectID)
+		modInfo["fileID"], _ = strconv.Atoi(fileID)
+		modInfo["required"] = true
+		modInfo["desc"] = desc
 
-	// Walk through the list of files; if we find one with same project ID, delete it
-	existingIndex := -1
-	files, _ := cp.manifest.S("files").Children()
-	for i, child := range files {
-		if child.S("projectID").Data() == projectID {
-			existingIndex = i
-			break
+		// Walk through the list of files; if we find one with same project ID, delete it
+		existingIndex := -1
+		files, _ := cp.manifest.S("files").Children()
+		for i, child := range files {
+			if child.S("projectID").Data() == projectID {
+				existingIndex = i
+				break
+			}
+		}
+
+		if existingIndex > -1 {
+			cp.manifest.S("files").SetIndex(modInfo, existingIndex)
+		} else {
+			cp.manifest.ArrayAppendP(modInfo, "files")
 		}
 	}
 
-	if existingIndex > -1 {
-		cp.manifest.S("files").SetIndex(modInfo, existingIndex)
-	} else {
-		cp.manifest.ArrayAppendP(modInfo, "files")
-	}
-
-	// Write the manifest file
+	// Finally, update the manifest file
 	return cp.saveManifest()
 }
 
-func (cp *CursePack) saveManifest() error {
+func (cp *ModPack) saveManifest() error {
 	// Write the manifest file
 	manifestStr := cp.manifest.StringIndent("", "  ")
 	err := ioutil.WriteFile(filepath.Join(cp.path, "manifest.json"), []byte(manifestStr), 0644)
@@ -296,15 +303,7 @@ func (cp *CursePack) saveManifest() error {
 	return nil
 }
 
-func (cp *CursePack) registerExtMod(name, url string) error {
-	// Insert the url by name into extfiles map
-	cp.manifest.Set(url, "extfiles", name)
-
-	// Write the manifest file
-	return cp.saveManifest()
-}
-
-func (cp *CursePack) installMod(projectID, fileID int) (string, error) {
+func (cp *ModPack) installMod(projectID, fileID int) (string, error) {
 	// First, resolve the project ID
 	baseURL, err := getRedirectURL(fmt.Sprintf("https://minecraft.curseforge.com/projects/%d?cookieTest=1", projectID))
 	if err != nil {
@@ -316,7 +315,7 @@ func (cp *CursePack) installMod(projectID, fileID int) (string, error) {
 	return cp.installModURL(finalURL)
 }
 
-func (cp *CursePack) installModURL(url string) (string, error) {
+func (cp *ModPack) installModURL(url string) (string, error) {
 	// Start the download
 	resp, err := HttpGet(url)
 	if err != nil {
@@ -356,7 +355,7 @@ func (cp *CursePack) installModURL(url string) (string, error) {
 	return filepath.Base(filename), nil
 }
 
-func (cp *CursePack) installOverrides() error {
+func (cp *ModPack) installOverrides() error {
 	// Open the pack.zip
 	pack, err := zip.OpenReader(filepath.Join(cp.path, "pack.zip"))
 	if err != nil {
@@ -396,7 +395,7 @@ func (cp *CursePack) installOverrides() error {
 	return nil
 }
 
-func (cp *CursePack) installServer() error {
+func (cp *ModPack) installServer() error {
 	// Get the minecraft + forge versions from manifest
 	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
 	forgeVsn := cp.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
