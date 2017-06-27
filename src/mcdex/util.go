@@ -115,6 +115,7 @@ func writeStream(filename string, data io.Reader) error {
 		return fmt.Errorf("failed to write %s: %v", filename, err)
 	}
 	writer.Flush()
+	f.Close()
 
 	// Ok, write completed successfully, move the file
 	err = os.Rename(tempFilename, filename)

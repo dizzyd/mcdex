@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 type command struct {
@@ -20,6 +22,10 @@ var gCommands = map[string]command{
 	"installPack": command{
 		Fn:    cmdInstallPack,
 		Usage: "Install a mod pack",
+	},
+	"installLocalPack": command{
+		Fn:    cmdInstallLocalPack,
+		Usage: "Install specified directory as a pack",
 	},
 	"update": command{
 		Fn:    cmdUpdate,
@@ -114,6 +120,39 @@ func cmdInstallPack() error {
 	return nil
 }
 
+func cmdInstallLocalPack() error {
+	// If there are not enough arguments, bail
+	if flag.NArg() < 2 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	name := flag.Arg(1)
+	if name == "." {
+		name, _ = os.Getwd()
+	}
+	name, _ = filepath.Abs(name)
+
+	// Create the mod pack directory (if it doesn't already exist)
+	cp, err := OpenModPack(name)
+	if err != nil {
+		return err
+	}
+
+	// Setup a launcher profile
+	err = cp.createLauncherProfile()
+	if err != nil {
+		return err
+	}
+
+	// Install all the mods
+	err = cp.installMods()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func cmdUpdate() error {
 	db, err := NewDatabase()
 	if err != nil {
@@ -147,7 +186,11 @@ func cmdInstallMods() error {
 }
 
 func cmdRegisterMod() error {
-	if flag.NArg() < 4 {
+	if flag.NArg() < 3 {
+		return fmt.Errorf("Insufficient arguments")
+	}
+
+	if !strings.Contains(flag.Arg(2), "minecraft.curseforge.com") && flag.NArg() < 4 {
 		return fmt.Errorf("Insufficient arguments")
 	}
 

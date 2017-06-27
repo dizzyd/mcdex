@@ -53,7 +53,15 @@ func NewModPack(name string, url string) (*ModPack, error) {
 func OpenModPack(name string) (*ModPack, error) {
 	cp := new(ModPack)
 	cp.name = name
-	cp.path = filepath.Join(env().McdexDir, "pack", name)
+
+	fmt.Printf("-->%s\n", name)
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
+		cp.path = name
+		cp.name = filepath.Base(name)
+	} else {
+		cp.path = filepath.Join(env().McdexDir, "pack", name)
+	}
+
 	cp.modPath = filepath.Join(cp.path, "mods")
 
 	// Make sure the target directory exists
@@ -176,6 +184,9 @@ func (cp *ModPack) createLauncherProfile() error {
 }
 
 func (cp *ModPack) installMods() error {
+	// Make sure mods directory already exists
+	os.MkdirAll(cp.modPath, 0700)
+
 	// Using manifest, download each mod file into pack directory from Curseforge
 	files, _ := cp.manifest.Path("files").Children()
 	for _, f := range files {
@@ -217,10 +228,10 @@ func (cp *ModPack) installMods() error {
 	return nil
 }
 
-func (cp *ModPack) registerMod(name, url string) error {
+func (cp *ModPack) registerMod(url, name string) error {
 	// If the URL doesn't contain minecraft.curseforge.com, assume we're only being given
 	// the URL and a tagname (to be registered in extfiles)
-	if strings.Contains(url, "minecraft.curseforge.com") {
+	if !strings.Contains(url, "minecraft.curseforge.com") {
 		// Insert the url by name into extfiles map
 		cp.manifest.Set(url, "extfiles", name)
 	} else {
@@ -261,14 +272,14 @@ func (cp *ModPack) registerMod(name, url string) error {
 			cp.manifest.ArrayOfSizeP(0, "files")
 		}
 
-		projectID := projectDetails.S("projectID").Data().(string)
-		fileID := projectDetails.S("projectFileID").Data().(string)
+		projectID, _ := strconv.Atoi(projectDetails.S("projectID").Data().(string))
+		fileID, _ := strconv.Atoi(projectDetails.S("projectFileID").Data().(string))
 
 		// We should now have the project & file IDs; add them to the manifest and
 		// save it
 		modInfo := make(map[string]interface{})
-		modInfo["projectID"], _ = strconv.Atoi(projectID)
-		modInfo["fileID"], _ = strconv.Atoi(fileID)
+		modInfo["projectID"] = projectID
+		modInfo["fileID"] = fileID
 		modInfo["required"] = true
 		modInfo["desc"] = desc
 
@@ -276,7 +287,8 @@ func (cp *ModPack) registerMod(name, url string) error {
 		existingIndex := -1
 		files, _ := cp.manifest.S("files").Children()
 		for i, child := range files {
-			if child.S("projectID").Data() == projectID {
+			childProjectID := int(child.S("projectID").Data().(float64))
+			if childProjectID == projectID {
 				existingIndex = i
 				break
 			}
