@@ -9,11 +9,7 @@ import (
 
 	"io/ioutil"
 
-	"strconv"
-
 	"github.com/Jeffail/gabs"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/robertkrimen/otto"
 )
 
 type ModPack struct {
@@ -235,61 +231,40 @@ func (cp *ModPack) registerMod(url, name string) error {
 		// Insert the url by name into extfiles map
 		cp.manifest.Set(url, "extfiles", name)
 	} else {
-		// Retrieve the URL (we assume it's a HTML webpage)
-		res, e := HttpGet(url)
-		if e != nil {
-			return fmt.Errorf("failed to get %s: %+v", url, e)
-		}
-		defer res.Body.Close()
-		doc, err := goquery.NewDocumentFromResponse(res)
+		cfile, err := getCurseForgeFile(url)
 		if err != nil {
-			return fmt.Errorf("failed to parse %s: %+v", url, e)
+			return err
 		}
-
-		// Extract the description of this mod file for addition to manifest
-		desc, _ := doc.Find("meta[property='og:description']").Attr("content")
-
-		// Setup a JS VM and run the HTML through it; we want to process any
-		// script sections in the head so we can extract Elerium meta-data
-		vm := otto.New()
-		vm.Run("Elerium = {}; Elerium.ProjectFileDetails = {}")
-		doc.Find("head script").Each(func(i int, sel *goquery.Selection) {
-			vm.Run(sel.Text())
-		})
-
-		// Convert the Elerium data into JSON, then a string to get it out the VM
-		data, err := vm.Run("JSON.stringify(Elerium.ProjectFileDetails)")
-		if err != nil {
-			return fmt.Errorf("failed to extract project file details: %+v", err)
-		}
-
-		// Reparse from string into JSON (blech)
-		dataStr, _ := data.ToString()
-		projectDetails, _ := gabs.ParseJSON([]byte(dataStr))
 
 		// Make sure files entry exists in manifest
 		if !cp.manifest.Exists("files") {
 			cp.manifest.ArrayOfSizeP(0, "files")
 		}
 
-		projectID, _ := strconv.Atoi(projectDetails.S("projectID").Data().(string))
-		fileID, _ := strconv.Atoi(projectDetails.S("projectFileID").Data().(string))
-
-		// We should now have the project & file IDs; add them to the manifest and
-		// save it
+		// Add project & file IDs to manifest
 		modInfo := make(map[string]interface{})
-		modInfo["projectID"] = projectID
-		modInfo["fileID"] = fileID
+		modInfo["projectID"] = cfile.ProjectID
+		modInfo["fileID"] = cfile.ID
 		modInfo["required"] = true
-		modInfo["desc"] = desc
+		modInfo["desc"] = cfile.Desc
 
 		// Walk through the list of files; if we find one with same project ID, delete it
 		existingIndex := -1
 		files, _ := cp.manifest.S("files").Children()
 		for i, child := range files {
 			childProjectID := int(child.S("projectID").Data().(float64))
-			if childProjectID == projectID {
+			if childProjectID == cfile.ProjectID {
+				// Found a matching project ID; note the index so we can replace it
 				existingIndex = i
+
+				// Also, delete any mod files listed by name
+				filename, ok := child.S("filename").Data().(string)
+				filename = filepath.Join(cp.modPath, filename)
+				if ok && fileExists(filename) {
+					// Try to remove the file; don't worry about error case
+					os.Remove(filename)
+				}
+
 				break
 			}
 		}
