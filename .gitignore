@@ -28,3 +28,6 @@ _testmain.go
 src/mcdex-*
 bin
 pkg
+
+src/golang.org
+src/github.com
