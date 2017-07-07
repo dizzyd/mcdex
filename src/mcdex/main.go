@@ -132,7 +132,7 @@ func cmdInstallPack() error {
 	}
 
 	// Install mods
-	err = cp.installMods()
+	err = cp.installMods(true)
 	if err != nil {
 		return err
 	}
@@ -167,7 +167,7 @@ func cmdInstallLocalPack() error {
 	}
 
 	// Install all the mods
-	err = cp.installMods()
+	err = cp.installMods(true)
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func cmdInstallServer() error {
 	}
 
 	// Make sure all mods are installed
-	err = cp.installMods()
+	err = cp.installMods(false)
 	if err != nil {
 		return err
 	}

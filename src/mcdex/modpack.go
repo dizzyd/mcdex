@@ -190,13 +190,19 @@ func (cp *ModPack) createLauncherProfile() error {
 	return nil
 }
 
-func (cp *ModPack) installMods() error {
+func (cp *ModPack) installMods(isClient bool) error {
 	// Make sure mods directory already exists
 	os.MkdirAll(cp.modPath, 0700)
 
 	// Using manifest, download each mod file into pack directory from Curseforge
 	files, _ := cp.manifest.Path("files").Children()
 	for _, f := range files {
+		clientOnlyMod, ok := f.S("clientOnly").Data().(bool)
+		if ok && clientOnlyMod && !isClient {
+			fmt.Printf("Skipping client-only mod %s\n", f.Path("desc").Data().(string))
+			continue
+		}
+
 		// If we have an entry with the filename, check to see if it exists;
 		// bail if so
 		baseFilename := f.Path("filename").Data()
