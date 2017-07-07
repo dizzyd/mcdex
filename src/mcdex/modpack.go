@@ -77,12 +77,17 @@ func OpenModPack(name string) (*ModPack, error) {
 }
 
 func initPackDirs(name string, cp *ModPack) {
-	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
+	if name == "." {
+		cp.path, _ = os.Getwd()
+		cp.name = filepath.Base(name)
+	} else if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
 		cp.path = name
 		cp.name = filepath.Base(name)
 	} else {
 		cp.path = filepath.Join(env().McdexDir, "pack", name)
 	}
+
+	fmt.Printf("-- %s --\n", cp.path)
 
 	cp.modPath = filepath.Join(cp.path, "mods")
 }
