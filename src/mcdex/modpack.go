@@ -235,12 +235,14 @@ func (cp *ModPack) installMods() error {
 	return nil
 }
 
-func (cp *ModPack) registerMod(url, name string) error {
+func (cp *ModPack) registerMod(url, name string, clientOnly bool) error {
 	// If the URL doesn't contain minecraft.curseforge.com, assume we're only being given
 	// the URL and a tagname (to be registered in extfiles)
 	if !strings.Contains(url, "minecraft.curseforge.com") {
 		// Insert the url by name into extfiles map
 		cp.manifest.Set(url, "extfiles", name)
+
+		fmt.Printf("Registered %s as %s (clientOnly=%t)\n", url, name, clientOnly)
 	} else {
 		cfile, err := getCurseForgeFile(url)
 		if err != nil {
@@ -258,6 +260,10 @@ func (cp *ModPack) registerMod(url, name string) error {
 		modInfo["fileID"] = cfile.ID
 		modInfo["required"] = true
 		modInfo["desc"] = cfile.Desc
+
+		if clientOnly {
+			modInfo["clientOnly"] = true
+		}
 
 		// Walk through the list of files; if we find one with same project ID, delete it
 		existingIndex := -1
@@ -285,6 +291,8 @@ func (cp *ModPack) registerMod(url, name string) error {
 		} else {
 			cp.manifest.ArrayAppendP(modInfo, "files")
 		}
+
+		fmt.Printf("Registered %s (clientOnly=%t)\n", cfile.Desc, clientOnly)
 	}
 
 	// Finally, update the manifest file

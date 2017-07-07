@@ -63,11 +63,11 @@ var gCommands = map[string]command{
 		ArgsCount: 2,
 		Args:      "<directory> <url> [<name>]",
 	},
-	"installMods": command{
-		Fn:        cmdInstallMods,
-		Desc:      "Install all mods using the manifest",
-		ArgsCount: 1,
-		Args:      "<directory>",
+	"registerClientMod": command{
+		Fn:        cmdRegisterClientMod,
+		Desc:      "Register a client-side only curseforge mod with an existing pack",
+		ArgsCount: 2,
+		Args:      "<directory> <url> [<name>]",
 	},
 	"installServer": command{
 		Fn:        cmdInstallServer,
@@ -181,6 +181,14 @@ func cmdInfo() error {
 }
 
 func cmdRegisterMod() error {
+	return _registerMod(false)
+}
+
+func cmdRegisterClientMod() error {
+	return _registerMod(true)
+}
+
+func _registerMod(clientOnly bool) error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
 	name := flag.Arg(3)
@@ -194,23 +202,7 @@ func cmdRegisterMod() error {
 		return err
 	}
 
-	err = cp.registerMod(flag.Arg(2), flag.Arg(3))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func cmdInstallMods() error {
-	dir := flag.Arg(1)
-
-	cp, err := OpenModPack(dir)
-	if err != nil {
-		return err
-	}
-
-	err = cp.installMods()
+	err = cp.registerMod(url, name, clientOnly)
 	if err != nil {
 		return err
 	}
@@ -250,8 +242,6 @@ func console(f string, args ...interface{}) {
 
 func usage() {
 	console("usage: mcdex [<options>] <command> [<args>]\n")
-	// console(" options:\n")
-	// flag.PrintDefaults()
 	console(" commands:\n")
 	for id, cmd := range gCommands {
 		console(" - %s: %s\n", id, cmd.Desc)
