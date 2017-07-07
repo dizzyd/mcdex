@@ -39,15 +39,8 @@ type ModPack struct {
 
 func NewModPack(name string, url string) (*ModPack, error) {
 	cp := new(ModPack)
-	cp.name = name
-	cp.path = filepath.Join(env().McdexDir, "pack", name)
-	cp.modPath = filepath.Join(cp.path, "mods")
+	initPackDirs(name, cp)
 	cp.url = url
-
-	// Make sure the target directory doesn't yet exist
-	if dirExists(cp.path) {
-		return nil, fmt.Errorf("Pack directory already exists: %s", cp.path)
-	}
 
 	// Create the directories
 	err := os.MkdirAll(cp.path, 0700)
@@ -65,16 +58,7 @@ func NewModPack(name string, url string) (*ModPack, error) {
 
 func OpenModPack(name string) (*ModPack, error) {
 	cp := new(ModPack)
-	cp.name = name
-
-	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
-		cp.path = name
-		cp.name = filepath.Base(name)
-	} else {
-		cp.path = filepath.Join(env().McdexDir, "pack", name)
-	}
-
-	cp.modPath = filepath.Join(cp.path, "mods")
+	initPackDirs(name, cp)
 
 	// Make sure the target directory exists
 	if !dirExists(cp.path) {
@@ -90,6 +74,17 @@ func OpenModPack(name string) (*ModPack, error) {
 	cp.manifest = manifest
 
 	return cp, nil
+}
+
+func initPackDirs(name string, cp *ModPack) {
+	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
+		cp.path = name
+		cp.name = filepath.Base(name)
+	} else {
+		cp.path = filepath.Join(env().McdexDir, "pack", name)
+	}
+
+	cp.modPath = filepath.Join(cp.path, "mods")
 }
 
 func (cp *ModPack) download() error {
@@ -156,7 +151,7 @@ func (cp *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	cp.manifest.Path("minecraft.modLoaders").SetIndex(loader, 0)
 
 	// Write the manifest file
-	err := ioutil.WriteFile(filepath.Join(cp.path, "manifest.json"), []byte(cp.manifest.String()), 0644)
+	err := cp.saveManifest()
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
