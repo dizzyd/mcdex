@@ -38,13 +38,13 @@ var gCommands = map[string]command{
 		Fn:        cmdCreatePack,
 		Desc:      "Create a new mod pack",
 		ArgsCount: 3,
-		Args:      "<packname> <minecraft version> <forge version>",
+		Args:      "<directory> <minecraft version> <forge version>",
 	},
 	"installPack": command{
 		Fn:        cmdInstallPack,
 		Desc:      "Install a mod pack from URL",
 		ArgsCount: 2,
-		Args:      "<packname> <url>",
+		Args:      "<directory> <url>",
 	},
 	"installLocalPack": command{
 		Fn:        cmdInstallLocalPack,
@@ -59,13 +59,13 @@ var gCommands = map[string]command{
 	},
 	"registerMod": command{
 		Fn:        cmdRegisterMod,
-		Desc:      "Register a curseforge mod with an existing pack",
+		Desc:      "Register a CurseForge mod with an existing pack",
 		ArgsCount: 2,
 		Args:      "<directory> <url> [<name>]",
 	},
 	"registerClientMod": command{
 		Fn:        cmdRegisterClientMod,
-		Desc:      "Register a client-side only curseforge mod with an existing pack",
+		Desc:      "Register a client-side only CurseForge mod with an existing pack",
 		ArgsCount: 2,
 		Args:      "<directory> <url> [<name>]",
 	},
@@ -78,18 +78,18 @@ var gCommands = map[string]command{
 }
 
 func cmdCreatePack() error {
-	name := flag.Arg(1)
+	dir := flag.Arg(1)
 	minecraftVsn := flag.Arg(2)
 	forgeVsn := flag.Arg(3)
 
 	// Create a new pack directory
-	cp, err := NewModPack(name, "")
+	cp, err := NewModPack(dir, "")
 	if err != nil {
 		return err
 	}
 
 	// Create the manifest for this new pack
-	err = cp.createManifest(name, minecraftVsn, forgeVsn)
+	err = cp.createManifest(dir, minecraftVsn, forgeVsn)
 	if err != nil {
 		return err
 	}
@@ -104,11 +104,11 @@ func cmdCreatePack() error {
 }
 
 func cmdInstallPack() error {
-	name := flag.Arg(1)
+	dir := flag.Arg(1)
 	url := flag.Arg(2)
 
 	// Get ZIP file
-	cp, err := NewModPack(name, url)
+	cp, err := NewModPack(dir, url)
 	if err != nil {
 		return err
 	}
