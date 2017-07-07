@@ -69,9 +69,9 @@ var gCommands = map[string]command{
 		ArgsCount: 1,
 		Args:      "<directory>",
 	},
-	"runServer": command{
-		Fn:        cmdRunServer,
-		Desc:      "Run a Minecraft server using an existing pack",
+	"installServer": command{
+		Fn:        cmdInstallServer,
+		Desc:      "Install a Minecraft server using an existing pack",
 		ArgsCount: 1,
 		Args:      "<directory>",
 	},
@@ -218,7 +218,7 @@ func cmdInstallMods() error {
 	return nil
 }
 
-func cmdRunServer() error {
+func cmdInstallServer() error {
 	dir := flag.Arg(1)
 
 	// Open the pack
@@ -229,6 +229,12 @@ func cmdRunServer() error {
 
 	// Install the server jar, forge and dependencies
 	err = cp.installServer()
+	if err != nil {
+		return err
+	}
+
+	// Make sure all mods are installed
+	err = cp.installMods()
 	if err != nil {
 		return err
 	}
