@@ -50,7 +50,6 @@ func OpenModPack(name string) (*ModPack, error) {
 	cp := new(ModPack)
 	cp.name = name
 
-	fmt.Printf("-->%s\n", name)
 	if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
 		cp.path = name
 		cp.name = filepath.Base(name)

@@ -10,58 +10,69 @@ import (
 )
 
 type command struct {
-	Fn    func() error
-	Usage string
+	Fn        func() error
+	Desc      string
+	ArgsCount int
+	Args      string
 }
 
 var gCommands = map[string]command{
 	"createPack": command{
-		Fn:    cmdCreatePack,
-		Usage: "Create a new mod pack",
+		Fn:        cmdCreatePack,
+		Desc:      "Create a new mod pack",
+		ArgsCount: 3,
+		Args:      "<packname> <minecraft version> <forge version>",
 	},
 	"installPack": command{
-		Fn:    cmdInstallPack,
-		Usage: "Install a mod pack",
+		Fn:        cmdInstallPack,
+		Desc:      "Install a mod pack from URL",
+		ArgsCount: 2,
+		Args:      "<packname> <url>",
 	},
 	"installLocalPack": command{
-		Fn:    cmdInstallLocalPack,
-		Usage: "Install specified directory as a pack",
-	},
-	"update": command{
-		Fn:    cmdUpdate,
-		Usage: "Download latest index",
+		Fn:        cmdInstallLocalPack,
+		Desc:      "Install specified directory as a pack",
+		ArgsCount: 1,
+		Args:      "<directory>",
 	},
 	"info": command{
-		Fn:    cmdInfo,
-		Usage: "Show runtime info",
+		Fn:        cmdInfo,
+		Desc:      "Show runtime info",
+		ArgsCount: 0,
 	},
 	"registerMod": command{
-		Fn:    cmdRegisterMod,
-		Usage: "Register a curseforge mod with an existing pack",
+		Fn:        cmdRegisterMod,
+		Desc:      "Register a curseforge mod with an existing pack",
+		ArgsCount: 2,
+		Args:      "<directory> <url> [<name>]",
 	},
 	"installMods": command{
-		Fn:    cmdInstallMods,
-		Usage: "Install all mods using the manifest",
+		Fn:        cmdInstallMods,
+		Desc:      "Install all mods using the manifest",
+		ArgsCount: 1,
+		Args:      "<directory>",
 	},
 	"runServer": command{
-		Fn:    cmdRunServer,
-		Usage: "Run a minecraft server with an existing pack",
+		Fn:        cmdRunServer,
+		Desc:      "Run a Minecraft server using an existing pack",
+		ArgsCount: 1,
+		Args:      "<directory>",
 	},
 }
 
 func cmdCreatePack() error {
-	if flag.NArg() < 4 {
-		return fmt.Errorf("Insufficient arguments")
-	}
+	name := flag.Arg(1)
+	minecraftVsn := flag.Arg(2)
+	forgeVsn := flag.Arg(3)
 
 	// Create a new pack directory
-	cp, err := NewModPack(flag.Arg(1), "")
+	cp, err := NewModPack(name, "")
 	if err != nil {
 		return err
 	}
 
 	// Create the manifest for this new pack
-	err = cp.createManifest(flag.Arg(1), flag.Arg(2), flag.Arg(3))
+	err = cp.createManifest(name, minecraftVsn, forgeVsn)
 	if err != nil {
 		return err
 	}
@@ -76,13 +87,11 @@ func cmdCreatePack() error {
 }
 
 func cmdInstallPack() error {
-	// If there are not enough arguments, bail
-	if flag.NArg() < 3 {
-		return fmt.Errorf("Insufficient arguments")
-	}
+	name := flag.Arg(1)
+	url := flag.Arg(2)
 
 	// Get ZIP file
-	cp, err := NewModPack(flag.Arg(1), flag.Arg(2))
+	cp, err := NewModPack(name, url)
 	if err != nil {
 		return err
 	}
@@ -105,7 +114,7 @@ func cmdInstallPack() error {
 		return err
 	}
 
-	// Install plugins
+	// Install mods
 	err = cp.installMods()
 	if err != nil {
 		return err
@@ -121,19 +130,15 @@ func cmdInstallPack() error {
 }
 
 func cmdInstallLocalPack() error {
-	// If there are not enough arguments, bail
-	if flag.NArg() < 2 {
-		return fmt.Errorf("Insufficient arguments")
-	}
+	dir := flag.Arg(1)
 
-	name := flag.Arg(1)
-	if name == "." {
-		name, _ = os.Getwd()
+	if dir == "." {
+		dir, _ = os.Getwd()
 	}
-	name, _ = filepath.Abs(name)
+	dir, _ = filepath.Abs(dir)
 
 	// Create the mod pack directory (if it doesn't already exist)
-	cp, err := OpenModPack(name)
+	cp, err := OpenModPack(dir)
 	if err != nil {
 		return err
 	}
@@ -153,48 +158,21 @@ func cmdInstallLocalPack() error {
 	return nil
 }
 
-func cmdUpdate() error {
-	db, err := NewDatabase()
-	if err != nil {
-		log.Fatalf("%+v\n", err)
-	}
-
-	return db.Download()
-}
-
 func cmdInfo() error {
 	fmt.Printf("Env: %+v\n", env())
 	return nil
 }
 
-func cmdInstallMods() error {
-	if flag.NArg() < 1 {
-		return fmt.Errorf("Insufficient arguments")
-	}
-
-	cp, err := OpenModPack(flag.Arg(1))
-	if err != nil {
-		return err
-	}
-
-	err = cp.installMods()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func cmdRegisterMod() error {
-	if flag.NArg() < 3 {
+	dir := flag.Arg(1)
+	url := flag.Arg(2)
+	name := flag.Arg(3)
+
+	if !strings.Contains(url, "minecraft.curseforge.com") && name == "" {
 		return fmt.Errorf("Insufficient arguments")
 	}
 
-	if !strings.Contains(flag.Arg(2), "minecraft.curseforge.com") && flag.NArg() < 4 {
-		return fmt.Errorf("Insufficient arguments")
-	}
-
-	cp, err := OpenModPack(flag.Arg(1))
+	cp, err := OpenModPack(dir)
 	if err != nil {
 		return err
 	}
@@ -207,13 +185,27 @@ func cmdRegisterMod() error {
 	return nil
 }
 
-func cmdRunServer() error {
-	if flag.NArg() < 2 {
-		return fmt.Errorf("Insufficient arguments")
+func cmdInstallMods() error {
+	dir := flag.Arg(1)
+
+	cp, err := OpenModPack(dir)
+	if err != nil {
+		return err
 	}
 
+	err = cp.installMods()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func cmdRunServer() error {
+	dir := flag.Arg(1)
+
 	// Open the pack
-	cp, err := OpenModPack(flag.Arg(1))
+	cp, err := OpenModPack(dir)
 	if err != nil {
 		return err
 	}
@@ -239,8 +231,12 @@ func usage() {
 	// flag.PrintDefaults()
 	console(" commands:\n")
 	for id, cmd := range gCommands {
-		console(" - %s: %s\n", id, cmd.Usage)
+		console(" - %s: %s\n", id, cmd.Desc)
 	}
+}
+
+func usageCmd(name string, cmd command) {
+	console("usage: mcdex %s %s\n", name, cmd.Args)
 }
 
 func main() {
@@ -257,10 +253,18 @@ func main() {
 		log.Fatalf("Failed to initialize: %s\n", err)
 	}
 
-	command, exists := gCommands[flag.Arg(0)]
+	commandName := flag.Arg(0)
+	command, exists := gCommands[commandName]
 	if !exists {
-		console("ERROR: unknown command '%s'\n", flag.Arg(0))
+		console("ERROR: unknown command '%s'\n", commandName)
 		usage()
+		os.Exit(-1)
+	}
+
+	// Check that the required number of arguments is present
+	if flag.NArg() < command.ArgsCount+1 {
+		console("ERROR: insufficient arguments for %s\n", commandName)
+		console("usage: mcdex %s %s\n", commandName, command.Args)
 		os.Exit(-1)
 	}
 
