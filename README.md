@@ -25,6 +25,6 @@ Once the install is done, you can fire up the Minecraft launcher and you should 
 
 You can find the most recent releases here:
 
-[Windows](http://files.mcdex.net/releases/win32/mcdex.exe)
-[Linux](http://files.mcdex.net/releases/linux/mcdex)
-[OSX](http://files.mcdex.net/releases/osx/mcdex)
+* [Windows](http://files.mcdex.net/releases/win32/mcdex.exe)
+* [Linux](http://files.mcdex.net/releases/linux/mcdex)
+* [OSX](http://files.mcdex.net/releases/osx/mcdex)
