@@ -26,6 +26,8 @@ import (
 	"strings"
 )
 
+var version string
+
 type command struct {
 	Fn        func() error
 	Desc      string
@@ -176,6 +178,7 @@ func cmdInstallLocalPack() error {
 }
 
 func cmdInfo() error {
+	fmt.Printf("Version: %+s\n", version)
 	fmt.Printf("Env: %+v\n", env())
 	return nil
 }
