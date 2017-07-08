@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -44,15 +43,9 @@ var gCommands = map[string]command{
 	},
 	"installPack": command{
 		Fn:        cmdInstallPack,
-		Desc:      "Install a mod pack from URL",
-		ArgsCount: 2,
-		Args:      "<directory> <url>",
-	},
-	"installLocalPack": command{
-		Fn:        cmdInstallLocalPack,
-		Desc:      "Install specified directory as a pack",
+		Desc:      "Install a mod pack",
 		ArgsCount: 1,
-		Args:      "<directory>",
+		Args:      "<directory> [<url>]",
 	},
 	"info": command{
 		Fn:        cmdInfo,
@@ -85,7 +78,7 @@ func cmdCreatePack() error {
 	forgeVsn := flag.Arg(3)
 
 	// Create a new pack directory
-	cp, err := NewModPack(dir, "")
+	cp, err := NewModPack(dir, false)
 	if err != nil {
 		return err
 	}
@@ -109,22 +102,34 @@ func cmdInstallPack() error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
 
-	// Get ZIP file
-	cp, err := NewModPack(dir, url)
+	// Only require a manifest if we're not installing from a URL
+	requireManifest := (url == "")
+
+	cp, err := NewModPack(dir, requireManifest)
 	if err != nil {
 		return err
 	}
 
-	// Download the pack
-	err = cp.download()
-	if err != nil {
-		return err
-	}
+	if url != "" {
+		// Download the pack
+		err = cp.download(url)
+		if err != nil {
+			return err
+		}
 
-	// Process manifest
-	err = cp.processManifest()
-	if err != nil {
-		return err
+		// Process manifest
+		err = cp.processManifest()
+		if err != nil {
+			return err
+		}
+
+		// Install overrides from the modpack; this is a bit of a misnomer since
+		// under usual circumstances there's are no mods in the modpack file that
+		// will be also be downloaded
+		err = cp.installOverrides()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Create launcher profile
@@ -133,42 +138,7 @@ func cmdInstallPack() error {
 		return err
 	}
 
-	// Install mods
-	err = cp.installMods(true)
-	if err != nil {
-		return err
-	}
-
-	// Install overrides
-	err = cp.installOverrides()
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func cmdInstallLocalPack() error {
-	dir := flag.Arg(1)
-
-	if dir == "." {
-		dir, _ = os.Getwd()
-	}
-	dir, _ = filepath.Abs(dir)
-
-	// Create the mod pack directory (if it doesn't already exist)
-	cp, err := OpenModPack(dir)
-	if err != nil {
-		return err
-	}
-
-	// Setup a launcher profile
-	err = cp.createLauncherProfile()
-	if err != nil {
-		return err
-	}
-
-	// Install all the mods
+	// Install mods (include client-side only mods)
 	err = cp.installMods(true)
 	if err != nil {
 		return err
@@ -200,7 +170,7 @@ func _registerMod(clientOnly bool) error {
 		return fmt.Errorf("Insufficient arguments")
 	}
 
-	cp, err := OpenModPack(dir)
+	cp, err := NewModPack(dir, true)
 	if err != nil {
 		return err
 	}
@@ -216,13 +186,14 @@ func _registerMod(clientOnly bool) error {
 func cmdInstallServer() error {
 	dir := flag.Arg(1)
 
-	// Open the pack
-	cp, err := OpenModPack(dir)
+	// Open the pack; we require the manifest and any
+	// config files to already be present
+	cp, err := NewModPack(dir, true)
 	if err != nil {
 		return err
 	}
 
-	// Install the server jar, forge and dependencies
+	// Install the server jar, Forge and dependencies
 	err = cp.installServer()
 	if err != nil {
 		return err

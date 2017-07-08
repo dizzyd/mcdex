@@ -32,16 +32,27 @@ import (
 // ModPack is a directory, manifest and other components that represent a pack
 type ModPack struct {
 	name     string
-	url      string
 	path     string
 	modPath  string
 	manifest *gabs.Container
 }
 
-func NewModPack(name string, url string) (*ModPack, error) {
+func NewModPack(dir string, requireManifest bool) (*ModPack, error) {
 	cp := new(ModPack)
-	initPackDirs(name, cp)
-	cp.url = url
+
+	// Initialize path & name
+	if dir == "." {
+		cp.path, _ = os.Getwd()
+		cp.name = filepath.Base(dir)
+	} else if strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "C:") {
+		cp.path = dir
+		cp.name = filepath.Base(dir)
+	} else {
+		cp.path = filepath.Join(env().McdexDir, "pack", dir)
+	}
+
+	cp.modPath = filepath.Join(cp.path, "mods")
+	fmt.Printf("-- %s --\n", cp.path)
 
 	// Create the directories
 	err := os.MkdirAll(cp.path, 0700)
@@ -54,66 +65,36 @@ func NewModPack(name string, url string) (*ModPack, error) {
 		return nil, fmt.Errorf("Failed to create %s: %+v", cp.modPath, err)
 	}
 
-	return cp, nil
-}
-
-func OpenModPack(name string) (*ModPack, error) {
-	cp := new(ModPack)
-	initPackDirs(name, cp)
-
-	// Make sure the target directory exists
-	if !dirExists(cp.path) {
-		return nil, fmt.Errorf("Pack directory does not exist: %s", cp.path)
+	// Try to load the manifest; only raise an error if we require it to be loaded
+	err = cp.loadManifest()
+	if requireManifest && err != nil {
+		return nil, err
 	}
-
-	// Load the manifest; bail if we can't find one
-	manifest, err := gabs.ParseJSONFile(filepath.Join(cp.path, "manifest.json"))
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load manifest from %s: %+v", name, err)
-	}
-
-	cp.manifest = manifest
 
 	return cp, nil
 }
 
-func initPackDirs(name string, cp *ModPack) {
-	if name == "." {
-		cp.path, _ = os.Getwd()
-		cp.name = filepath.Base(name)
-	} else if strings.HasPrefix(name, "/") || strings.HasPrefix(name, "C:") {
-		cp.path = name
-		cp.name = filepath.Base(name)
-	} else {
-		cp.path = filepath.Join(env().McdexDir, "pack", name)
-	}
-
-	fmt.Printf("-- %s --\n", cp.path)
-
-	cp.modPath = filepath.Join(cp.path, "mods")
-}
-
-func (cp *ModPack) download() error {
+func (cp *ModPack) download(url string) error {
 	// If the pack.zip file already exists, shortcut out
 	packFilename := filepath.Join(cp.path, "pack.zip")
 	if fileExists(packFilename) {
 		return nil
 	}
 
-	fmt.Printf("Starting download of modpack: %s\n", cp.url)
+	fmt.Printf("Starting download of modpack: %s\n", url)
 
 	// For the moment, we only support modpacks from Curseforge and we must have the URL
 	// end in /download; check and enforce these conditions
-	if !strings.HasPrefix(cp.url, "https://minecraft.curseforge.com/projects/") {
+	if !strings.HasPrefix(url, "https://minecraft.curseforge.com/projects/") {
 		return fmt.Errorf("Invalid modpack URL; we only support Curseforge right now")
 	}
 
-	if !strings.HasSuffix(cp.url, "/download") {
-		cp.url += "/download"
+	if !strings.HasSuffix(url, "/download") {
+		url += "/download"
 	}
 
 	// Start the download
-	resp, err := HttpGet(cp.url)
+	resp, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to download %s: %+v", cp.name, err)
 	}
@@ -332,7 +313,7 @@ func (cp *ModPack) saveManifest() error {
 }
 
 func (cp *ModPack) loadManifest() error {
-	// Load the manifest; bail if we can't find one
+	// Load the manifest
 	manifest, err := gabs.ParseJSONFile(filepath.Join(cp.path, "manifest.json"))
 	if err != nil {
 		return fmt.Errorf("Failed to load manifest from %s: %+v", cp.path, err)
@@ -401,6 +382,8 @@ func (cp *ModPack) installOverrides() error {
 	}
 	defer pack.Close()
 
+	fmt.Printf("Installing overrides from modpack archive...\n")
+
 	// Walk over every file in the pack that is prefixed with installOverrides
 	// and write it out
 	for _, f := range pack.File {
@@ -414,7 +397,6 @@ func (cp *ModPack) installOverrides() error {
 		os.MkdirAll(filepath.Dir(filename), 0700)
 
 		if f.FileInfo().IsDir() {
-			fmt.Printf("Skipping dir: %s\n", f.Name)
 			continue
 		}
 
@@ -423,7 +405,6 @@ func (cp *ModPack) installOverrides() error {
 			return fmt.Errorf("failed to open %s: %+v", f.Name, err)
 		}
 
-		fmt.Printf("Unpacking %s\n", filepath.Base(filename))
 		err = writeStream(filename, freader)
 		if err != nil {
 			return fmt.Errorf("failed to save: %+v", err)
