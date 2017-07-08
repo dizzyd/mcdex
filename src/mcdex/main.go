@@ -27,6 +27,8 @@ import (
 
 var version string
 
+var ARG_MMC bool
+
 type command struct {
 	Fn        func() error
 	Desc      string
@@ -78,7 +80,7 @@ func cmdCreatePack() error {
 	forgeVsn := flag.Arg(3)
 
 	// Create a new pack directory
-	cp, err := NewModPack(dir, false)
+	cp, err := NewModPack(dir, false, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -105,7 +107,7 @@ func cmdInstallPack() error {
 	// Only require a manifest if we're not installing from a URL
 	requireManifest := (url == "")
 
-	cp, err := NewModPack(dir, requireManifest)
+	cp, err := NewModPack(dir, requireManifest, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -124,7 +126,7 @@ func cmdInstallPack() error {
 		}
 
 		// Install overrides from the modpack; this is a bit of a misnomer since
-		// under usual circumstances there's are no mods in the modpack file that
+		// under usual circumstances there are no mods in the modpack file that
 		// will be also be downloaded
 		err = cp.installOverrides()
 		if err != nil {
@@ -132,10 +134,19 @@ func cmdInstallPack() error {
 		}
 	}
 
-	// Create launcher profile
-	err = cp.createLauncherProfile()
-	if err != nil {
-		return err
+	// If the -mmc flag is provided, don't create a launcher profile; just generate
+	// an instance.cfg for MultiMC to use
+	if ARG_MMC == true {
+		err = cp.generateMMCConfig()
+		if err != nil {
+			return err
+		}
+	} else {
+		// Create launcher profile
+		err = cp.createLauncherProfile()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Install mods (include client-side only mods)
@@ -170,7 +181,7 @@ func _registerMod(clientOnly bool) error {
 		return fmt.Errorf("Insufficient arguments")
 	}
 
-	cp, err := NewModPack(dir, true)
+	cp, err := NewModPack(dir, true, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -186,9 +197,13 @@ func _registerMod(clientOnly bool) error {
 func cmdInstallServer() error {
 	dir := flag.Arg(1)
 
+	if ARG_MMC == true {
+		return fmt.Errorf("-mmc arg not supported when installing a server")
+	}
+
 	// Open the pack; we require the manifest and any
 	// config files to already be present
-	cp, err := NewModPack(dir, true)
+	cp, err := NewModPack(dir, true, false)
 	if err != nil {
 		return err
 	}
@@ -199,7 +214,7 @@ func cmdInstallServer() error {
 		return err
 	}
 
-	// Make sure all mods are installed
+	// Make sure all mods are installed (do NOT include client-side only)
 	err = cp.installMods(false)
 	if err != nil {
 		return err
@@ -222,11 +237,10 @@ func usage() {
 	}
 }
 
-func usageCmd(name string, cmd command) {
-	console("usage: mcdex %s %s\n", name, cmd.Args)
-}
-
 func main() {
+	// Register
+	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
+
 	// Process command-line args
 	flag.Parse()
 	if !flag.Parsed() || flag.NArg() < 1 {

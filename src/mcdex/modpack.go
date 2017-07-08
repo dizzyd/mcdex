@@ -32,32 +32,40 @@ import (
 // ModPack is a directory, manifest and other components that represent a pack
 type ModPack struct {
 	name     string
-	path     string
+	rootPath string
+	gamePath string
 	modPath  string
 	manifest *gabs.Container
 }
 
-func NewModPack(dir string, requireManifest bool) (*ModPack, error) {
+func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack, error) {
 	cp := new(ModPack)
 
 	// Initialize path & name
 	if dir == "." {
-		cp.path, _ = os.Getwd()
+		cp.rootPath, _ = os.Getwd()
 		cp.name = filepath.Base(dir)
 	} else if strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "C:") {
-		cp.path = dir
+		cp.rootPath = dir
 		cp.name = filepath.Base(dir)
 	} else {
-		cp.path = filepath.Join(env().McdexDir, "pack", dir)
+		cp.rootPath = filepath.Join(env().McdexDir, "pack", dir)
+		cp.name = dir
 	}
 
-	cp.modPath = filepath.Join(cp.path, "mods")
-	fmt.Printf("-- %s --\n", cp.path)
+	if enableMultiMC == true {
+		cp.gamePath = filepath.Join(cp.rootPath, "minecraft")
+	} else {
+		cp.gamePath = cp.rootPath
+	}
+
+	cp.modPath = filepath.Join(cp.gamePath, "mods")
+	fmt.Printf("-- %s --\n", cp.gamePath)
 
 	// Create the directories
-	err := os.MkdirAll(cp.path, 0700)
+	err := os.MkdirAll(cp.gamePath, 0700)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to create %s: %+v", cp.path, err)
+		return nil, fmt.Errorf("Failed to create %s: %+v", cp.gamePath, err)
 	}
 
 	err = os.MkdirAll(cp.modPath, 0700)
@@ -76,7 +84,7 @@ func NewModPack(dir string, requireManifest bool) (*ModPack, error) {
 
 func (cp *ModPack) download(url string) error {
 	// If the pack.zip file already exists, shortcut out
-	packFilename := filepath.Join(cp.path, "pack.zip")
+	packFilename := filepath.Join(cp.gamePath, "pack.zip")
 	if fileExists(packFilename) {
 		return nil
 	}
@@ -106,7 +114,7 @@ func (cp *ModPack) download(url string) error {
 
 func (cp *ModPack) processManifest() error {
 	// Open the pack.zip and parse the manifest
-	pack, err := zip.OpenReader(filepath.Join(cp.path, "pack.zip"))
+	pack, err := zip.OpenReader(filepath.Join(cp.gamePath, "pack.zip"))
 	if err != nil {
 		return fmt.Errorf("Failed to open pack.zip: %v", err)
 	}
@@ -156,14 +164,18 @@ func (cp *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	return nil
 }
 
+func (cp *ModPack) getVersions() (string, string) {
+	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
+	forgeVsn := cp.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
+	return minecraftVsn, forgeVsn
+}
+
 func (cp *ModPack) createLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
 	// version of forge with the appropriate version
-	minecraftVsn := cp.manifest.Path("minecraft.version").Data().(string)
-	forgeVsn := cp.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+	minecraftVsn, forgeVsn := cp.getVersions()
 
-	// Strip the "forge-"" prefix off the version string
-	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
 	var forgeID string
 	var err error
 
@@ -181,7 +193,7 @@ func (cp *ModPack) createLauncherProfile() error {
 	}
 
 	fmt.Printf("Creating profile: %s\n", cp.name)
-	lc.createProfile(cp.name, forgeID, cp.path)
+	lc.createProfile(cp.name, forgeID, cp.gamePath)
 	lc.save()
 
 	return nil
@@ -305,7 +317,7 @@ func (cp *ModPack) registerMod(url, name string, clientOnly bool) error {
 func (cp *ModPack) saveManifest() error {
 	// Write the manifest file
 	manifestStr := cp.manifest.StringIndent("", "  ")
-	err := ioutil.WriteFile(filepath.Join(cp.path, "manifest.json"), []byte(manifestStr), 0644)
+	err := ioutil.WriteFile(filepath.Join(cp.gamePath, "manifest.json"), []byte(manifestStr), 0644)
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
@@ -314,9 +326,9 @@ func (cp *ModPack) saveManifest() error {
 
 func (cp *ModPack) loadManifest() error {
 	// Load the manifest
-	manifest, err := gabs.ParseJSONFile(filepath.Join(cp.path, "manifest.json"))
+	manifest, err := gabs.ParseJSONFile(filepath.Join(cp.gamePath, "manifest.json"))
 	if err != nil {
-		return fmt.Errorf("Failed to load manifest from %s: %+v", cp.path, err)
+		return fmt.Errorf("Failed to load manifest from %s: %+v", cp.gamePath, err)
 	}
 	cp.manifest = manifest
 	return nil
@@ -376,13 +388,13 @@ func (cp *ModPack) installModURL(url string) (string, error) {
 
 func (cp *ModPack) installOverrides() error {
 	// Open the pack.zip
-	pack, err := zip.OpenReader(filepath.Join(cp.path, "pack.zip"))
+	pack, err := zip.OpenReader(filepath.Join(cp.gamePath, "pack.zip"))
 	if err != nil {
 		return fmt.Errorf("Failed to open pack.zip: %v", err)
 	}
 	defer pack.Close()
 
-	fmt.Printf("Installing overrides from modpack archive...\n")
+	fmt.Printf("Installing files from modpack archive\n")
 
 	// Walk over every file in the pack that is prefixed with installOverrides
 	// and write it out
@@ -391,7 +403,7 @@ func (cp *ModPack) installOverrides() error {
 			continue
 		}
 
-		filename := filepath.Join(cp.path, strings.Replace(f.Name, "overrides/", "", -1))
+		filename := filepath.Join(cp.gamePath, strings.Replace(f.Name, "overrides/", "", -1))
 
 		// Make sure the directory for the file exists
 		os.MkdirAll(filepath.Dir(filename), 0700)
@@ -423,7 +435,7 @@ func (cp *ModPack) installServer() error {
 	// Extract the version from manifest and setup a URL
 	filename := fmt.Sprintf("minecraft_server.%s.jar", minecraftVsn)
 	serverURL := fmt.Sprintf("https://s3.amazonaws.com/Minecraft.Download/versions/%s/%s", minecraftVsn, filename)
-	absFilename := filepath.Join(cp.path, filename)
+	absFilename := filepath.Join(cp.gamePath, filename)
 
 	// Only install if file isn't already present
 	if !fileExists(absFilename) {
@@ -447,9 +459,43 @@ func (cp *ModPack) installServer() error {
 		}
 	}
 
-	_, err := installServerForge(minecraftVsn, forgeVsn, cp.path)
+	_, err := installServerForge(minecraftVsn, forgeVsn, cp.gamePath)
 	if err != nil {
 		return fmt.Errorf("failed to install forge: %+v", err)
+	}
+
+	return nil
+}
+
+const MMC_CONFIG = `InstanceType=OneSix
+IntendedVersion=%s
+ForgeVersion=%s
+LogPrePostOutput=true
+OverrideCommands=false
+OverrideConsole=false
+OverrideJavaArgs=false
+OverrideJavaLocation=false
+OverrideMemory=false
+OverrideWindow=false
+iconKey=default
+lastLaunchTime=0
+name=%s - %s
+totalTimePlayed=0`
+
+func (cp *ModPack) generateMMCConfig() error {
+	name := cp.manifest.S("name").Data().(string)
+	version := cp.manifest.S("version").Data().(string)
+
+	// Generate the instance config string
+	minecraftVsn, forgeVsn := cp.getVersions()
+	cfg := fmt.Sprintf(MMC_CONFIG, minecraftVsn, forgeVsn, name, version)
+
+	fmt.Printf("Generating instance.cfg for MultiMC\n")
+
+	// Write it out
+	err := ioutil.WriteFile(filepath.Join(cp.rootPath, "instance.cfg"), []byte(cfg), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to save instance.cfg: %+v", err)
 	}
 
 	return nil
