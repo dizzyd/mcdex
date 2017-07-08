@@ -29,6 +29,7 @@ import (
 	"github.com/Jeffail/gabs"
 )
 
+// ModPack is a directory, manifest and other components that represent a pack
 type ModPack struct {
 	name     string
 	url      string
@@ -100,6 +101,16 @@ func (cp *ModPack) download() error {
 	}
 
 	fmt.Printf("Starting download of modpack: %s\n", cp.url)
+
+	// For the moment, we only support modpacks from Curseforge and we must have the URL
+	// end in /download; check and enforce these conditions
+	if !strings.HasPrefix(cp.url, "https://minecraft.curseforge.com/projects/") {
+		return fmt.Errorf("Invalid modpack URL; we only support Curseforge right now")
+	}
+
+	if !strings.HasSuffix(cp.url, "/download") {
+		cp.url += "/download"
+	}
 
 	// Start the download
 	resp, err := HttpGet(cp.url)
@@ -317,6 +328,16 @@ func (cp *ModPack) saveManifest() error {
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
+	return nil
+}
+
+func (cp *ModPack) loadManifest() error {
+	// Load the manifest; bail if we can't find one
+	manifest, err := gabs.ParseJSONFile(filepath.Join(cp.path, "manifest.json"))
+	if err != nil {
+		return fmt.Errorf("Failed to load manifest from %s: %+v", cp.path, err)
+	}
+	cp.manifest = manifest
 	return nil
 }
 
