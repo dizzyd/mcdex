@@ -58,7 +58,7 @@ This will add the entry for the file to your manifest.json, but not immediately 
 you need to install the pack:
 
 ```
-mcdex installLocalPack mypack
+mcdex installPack mypack
 ```
 
 
