@@ -93,8 +93,8 @@ func (cp *ModPack) download(url string) error {
 
 	// For the moment, we only support modpacks from Curseforge and we must have the URL
 	// end in /download; check and enforce these conditions
-	if !strings.HasPrefix(url, "https://minecraft.curseforge.com/projects/") {
-		return fmt.Errorf("Invalid modpack URL; we only support Curseforge right now")
+	if !strings.HasPrefix(url, "https://minecraft.curseforge.com/projects/") && !strings.HasPrefix(url, "https://www.feed-the-beast.com") {
+		return fmt.Errorf("Invalid modpack URL; we only support Curseforge & feed-the-beast.com right now")
 	}
 
 	if !strings.HasSuffix(url, "/download") {
