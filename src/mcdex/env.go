@@ -66,6 +66,12 @@ func unpack200Cmd() string {
 	return filepath.Join(envData.JavaDir, "bin", "unpack200"+_executableExt())
 }
 
+func vlog(f string, args ...interface{}) {
+	if ARG_VERBOSE {
+		fmt.Printf("V: "+f, args...)
+	}
+}
+
 func _minecraftDir() string {
 	user, _ := user.Current()
 	switch runtime.GOOS {
@@ -81,6 +87,7 @@ func _minecraftDir() string {
 func _findJavaDir(mcdir string) string {
 	// Check for JAVA_HOME; validate that contains bin/java
 	javaDir := os.Getenv("JAVA_HOME")
+	vlog("JAVA_HOME: %s\n", javaDir)
 	if javaDir != "" && _javaExists(javaDir) {
 		return javaDir
 	}
@@ -103,10 +110,12 @@ func _findJavaDir(mcdir string) string {
 	if whichJavaCmd != nil {
 		out, err := whichJavaCmd.Output()
 		if err != nil {
+			vlog("%s failed: %+v\n", whichJavaCmd.Args, err)
 			return ""
 		}
 
 		javaDir = filepath.Dir(filepath.Dir(strings.TrimSpace(string(out))))
+		vlog("%s -> %s\n", whichJavaCmd.Args, javaDir)
 		if _javaExists(javaDir) {
 			return javaDir
 		}
@@ -125,7 +134,9 @@ func _executableExt() string {
 
 func _javaExists(dir string) bool {
 	name := filepath.Join(dir, "bin", "java"+_executableExt())
-	return fileExists(name)
+	exists := fileExists(name)
+	vlog("_javaExists: %s -> %t\n", name, exists)
+	return exists
 }
 
 func _getEmbeddedMinecraftRuntime(mcDir string) string {
@@ -137,13 +148,17 @@ func _getEmbeddedMinecraftRuntime(mcDir string) string {
 		mcAppDir = filepath.Join(mcDir, "runtime", "jre-x64")
 	}
 
+	vlog("Embedded MC dir: %s\n", mcAppDir)
+
 	baseDir, err := os.Open(mcAppDir)
 	if err != nil {
+		vlog("Failed to open mcAppDir: %+v\n", err)
 		return ""
 	}
 
 	names, err := baseDir.Readdirnames(5)
 	if err != nil {
+		vlog("Failed to read directory %s: %+v\n", mcAppDir, err)
 		return ""
 	}
 

@@ -28,6 +28,7 @@ import (
 var version string
 
 var ARG_MMC bool
+var ARG_VERBOSE bool
 
 type command struct {
 	Fn        func() error
@@ -240,6 +241,7 @@ func usage() {
 func main() {
 	// Register
 	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
+	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 
 	// Process command-line args
 	flag.Parse()
