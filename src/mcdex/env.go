@@ -92,6 +92,13 @@ func _findJavaDir(mcdir string) string {
 		return javaDir
 	}
 
+	// Check for JRE_HOME
+	javaDir = os.Getenv("JRE_HOME")
+	vlog("JRE_HOME: %s\n", javaDir)
+	if javaDir != "" && _javaExists(javaDir) {
+		return javaDir
+	}
+
 	// Look for JDK installed in minecraft directory
 	javaDir = _getEmbeddedMinecraftRuntime(mcdir)
 	if javaDir != "" {
