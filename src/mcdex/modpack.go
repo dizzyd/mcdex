@@ -140,6 +140,10 @@ func (cp *ModPack) processManifest() error {
 	return nil
 }
 
+func (cp *ModPack) minecraftVersion() string {
+	return cp.manifest.Path("minecraft.version").Data().(string)
+}
+
 func (cp *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	// Create the manifest and set basic info
 	cp.manifest = gabs.New()
