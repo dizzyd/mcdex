@@ -61,6 +61,12 @@ var gCommands = map[string]command{
 		ArgsCount: 2,
 		Args:      "<directory> <url> [<name>]",
 	},
+	"findMod": command{
+		Fn:        cmdFindMod,
+		Desc:      "Find mods matching a name and Minecraft version",
+		ArgsCount: 2,
+		Args:      "<minecraft version> <name>",
+	},
 	"registerClientMod": command{
 		Fn:        cmdRegisterClientMod,
 		Desc:      "Register a client-side only CurseForge mod with an existing pack",
@@ -72,6 +78,11 @@ var gCommands = map[string]command{
 		Desc:      "Install a Minecraft server using an existing pack",
 		ArgsCount: 1,
 		Args:      "<directory>",
+	},
+	"updateDB": command{
+		Fn:        cmdUpdateDB,
+		Desc:      "Update local database of available mods",
+		ArgsCount: 0,
 	},
 }
 
@@ -175,24 +186,50 @@ func cmdRegisterClientMod() error {
 
 func _registerMod(clientOnly bool) error {
 	dir := flag.Arg(1)
-	url := flag.Arg(2)
+	mod := flag.Arg(2)
 	name := flag.Arg(3)
 
-	if !strings.Contains(url, "minecraft.curseforge.com") && name == "" {
-		return fmt.Errorf("Insufficient arguments")
-	}
-
+	// Try to open the mod pack
 	cp, err := NewModPack(dir, true, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
-	err = cp.registerMod(url, name, clientOnly)
+	// If the mod doesn't start with https://, assume it's a name and try to look it up
+	if !strings.HasPrefix("https://", mod) {
+		db, err := OpenDatabase()
+		if err != nil {
+			return err
+		}
+
+		// Lookup the URL for the mod
+		mod, err = db.findModFile(mod, cp.minecraftVersion())
+		if err != nil {
+			return err
+		}
+
+	} else if strings.Contains(mod, "minecraft.curseforge.com") && name == "" {
+		return fmt.Errorf("Non CurseForge URLs must include a name argument")
+	}
+
+	err = cp.registerMod(mod, name, clientOnly)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func cmdFindMod() error {
+	mcvsn := flag.Arg(1)
+	name := flag.Arg(2)
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	return db.listMods(name, mcvsn)
 }
 
 func cmdInstallServer() error {
@@ -224,6 +261,10 @@ func cmdInstallServer() error {
 	return nil
 	// Setup the command-line
 	// java -jar <forge.jar>
+}
+
+func cmdUpdateDB() error {
+	return InstallDatabase()
 }
 
 func console(f string, args ...interface{}) {

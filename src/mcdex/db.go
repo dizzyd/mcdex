@@ -28,19 +28,23 @@ import (
 	"path/filepath"
 	"strings"
 
+	"regexp"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type Database struct {
 	sqlDb     *sql.DB
 	sqlDbPath string
-	version   string
 }
 
-func NewDatabase() (*Database, error) {
+func OpenDatabase() (*Database, error) {
 	db := new(Database)
 
 	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
+	if !fileExists(db.sqlDbPath) {
+		return nil, fmt.Errorf("No database available; use updateDB command first")
+	}
 
 	sqlDb, err := sql.Open("sqlite3", db.sqlDbPath)
 	if err != nil {
@@ -52,16 +56,11 @@ func NewDatabase() (*Database, error) {
 	return db, nil
 }
 
-func (db *Database) Download() error {
+func InstallDatabase() error {
 	// Get the latest version
 	version, err := getLatestVersion()
 	if err != nil {
 		return err
-	}
-
-	// Compare the latest against current; if it's the same or earlier noop
-	if version <= db.version {
-		return nil
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
@@ -108,6 +107,8 @@ func (db *Database) Download() error {
 		return fmt.Errorf("Failed to rename mcdex.dat.tmp: %+v", err)
 	}
 
+	fmt.Printf("Updated mod database.\n")
+
 	return nil
 }
 
@@ -122,4 +123,57 @@ func getLatestVersion() (string, error) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(res.Body)
 	return strings.TrimSpace(buf.String()), nil
+}
+
+func (db *Database) listMods(name, mcvsn string) error {
+	// Turn the name into a pre-compiled regex
+	nameRegex, err := regexp.Compile(name)
+	if err != nil {
+		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
+	}
+
+	rows, err := db.sqlDb.Query("select name, description from mods where rowid in (select modid from filevsns where version = ?);", mcvsn)
+	if err != nil {
+		return fmt.Errorf("Query failed: %+v", err)
+	}
+	defer rows.Close()
+
+	// For each row, check the name against the pre-compiled regex
+	for rows.Next() {
+		var modName, modDesc string
+		err = rows.Scan(&modName, &modDesc)
+		if err != nil {
+			return err
+		}
+
+		if nameRegex.MatchString(modName) {
+			fmt.Printf("%s - %s\n", modName, modDesc)
+		}
+	}
+
+	return nil
+}
+
+func (db *Database) findModFile(name, mcvsn string) (string, error) {
+	// First, look up the modid for the given name
+	var modid int
+	err := db.sqlDb.QueryRow("select rowid from mods where name = ?", name).Scan(&modid)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No mod found %s", name)
+	case err != nil:
+		return "", err
+	}
+
+	// Now find the latest release or beta version
+	var url string
+	err = db.sqlDb.QueryRow("select url from files where rowid in (select fileid from filevsns where modid=? and version=? order by tstamp desc limit 1)",
+		modid, mcvsn).Scan(&url)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
+	case err != nil:
+		return "", err
+	}
+	return url, nil
 }
