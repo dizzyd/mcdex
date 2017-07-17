@@ -38,15 +38,15 @@ type command struct {
 }
 
 var gCommands = map[string]command{
-	"createPack": command{
-		Fn:        cmdCreatePack,
+	"pack.create": command{
+		Fn:        cmdPackCreate,
 		Desc:      "Create a new mod pack",
 		ArgsCount: 3,
 		Args:      "<directory> <minecraft version> <forge version>",
 	},
-	"installPack": command{
-		Fn:        cmdInstallPack,
-		Desc:      "Install a mod pack",
+	"pack.install": command{
+		Fn:        cmdPackInstall,
+		Desc:      "Install a mod pack, optionally using a URL to download",
 		ArgsCount: 1,
 		Args:      "<directory> [<url>]",
 	},
@@ -55,23 +55,23 @@ var gCommands = map[string]command{
 		Desc:      "Show runtime info",
 		ArgsCount: 0,
 	},
-	"registerMod": command{
-		Fn:        cmdRegisterMod,
-		Desc:      "Register a CurseForge mod with an existing pack",
-		ArgsCount: 2,
-		Args:      "<directory> <url> [<name>]",
-	},
-	"findMod": command{
-		Fn:        cmdFindMod,
+	"mod.find": command{
+		Fn:        cmdModFind,
 		Desc:      "Find mods matching a name and Minecraft version",
 		ArgsCount: 2,
-		Args:      "<minecraft version> <name>",
+		Args:      "<mod name> <minecraft version>",
 	},
-	"registerClientMod": command{
-		Fn:        cmdRegisterClientMod,
-		Desc:      "Register a client-side only CurseForge mod with an existing pack",
+	"mod.select": command{
+		Fn:        cmdModSelect,
+		Desc:      "Select a mod to include in the specified pack",
 		ArgsCount: 2,
-		Args:      "<directory> <url> [<name>]",
+		Args:      "<directory> <mod name or URL> [<tag>]",
+	},
+	"mod.select.client": command{
+		Fn:        cmdModSelectClient,
+		Desc:      "Select a client-side only mod to include in the specified pack",
+		ArgsCount: 2,
+		Args:      "<directory> <mod name or URL> [<tag>]",
 	},
 	"installServer": command{
 		Fn:        cmdInstallServer,
@@ -86,7 +86,7 @@ var gCommands = map[string]command{
 	},
 }
 
-func cmdCreatePack() error {
+func cmdPackCreate() error {
 	dir := flag.Arg(1)
 	minecraftVsn := flag.Arg(2)
 	forgeVsn := flag.Arg(3)
@@ -112,7 +112,7 @@ func cmdCreatePack() error {
 	return nil
 }
 
-func cmdInstallPack() error {
+func cmdPackInstall() error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
 
@@ -176,18 +176,18 @@ func cmdInfo() error {
 	return nil
 }
 
-func cmdRegisterMod() error {
-	return _registerMod(false)
+func cmdModSelect() error {
+	return _modSelect(false)
 }
 
-func cmdRegisterClientMod() error {
-	return _registerMod(true)
+func cmdModSelectClient() error {
+	return _modSelect(true)
 }
 
-func _registerMod(clientOnly bool) error {
+func _modSelect(clientOnly bool) error {
 	dir := flag.Arg(1)
 	mod := flag.Arg(2)
-	name := flag.Arg(3)
+	tag := flag.Arg(3)
 
 	// Try to open the mod pack
 	cp, err := NewModPack(dir, true, ARG_MMC)
@@ -208,11 +208,11 @@ func _registerMod(clientOnly bool) error {
 			return err
 		}
 
-	} else if strings.Contains(mod, "minecraft.curseforge.com") && name == "" {
-		return fmt.Errorf("Non CurseForge URLs must include a name argument")
+	} else if strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
+		return fmt.Errorf("Non-CurseForge URLs must include a tag argument")
 	}
 
-	err = cp.registerMod(mod, name, clientOnly)
+	err = cp.selectMod(mod, tag, clientOnly)
 	if err != nil {
 		return err
 	}
@@ -220,7 +220,7 @@ func _registerMod(clientOnly bool) error {
 	return nil
 }
 
-func cmdFindMod() error {
+func cmdModFind() error {
 	mcvsn := flag.Arg(1)
 	name := flag.Arg(2)
 

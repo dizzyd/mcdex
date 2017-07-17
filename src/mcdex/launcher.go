@@ -26,7 +26,7 @@ import (
 	"github.com/Jeffail/gabs"
 )
 
-var NameRegex = regexp.MustCompile("^\\w+$")
+var nameRegex = regexp.MustCompile("^\\w+$")
 
 type launcherConfig struct {
 	data      *gabs.Container
@@ -54,7 +54,7 @@ func newLauncherConfig() (*launcherConfig, error) {
 }
 
 func (lc *launcherConfig) createProfile(name, version, gameDir string) error {
-	if !NameRegex.MatchString(name) {
+	if !nameRegex.MatchString(name) {
 		return fmt.Errorf("invalid profile name: %s", name)
 	}
 	path := "profiles." + name

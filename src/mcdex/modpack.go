@@ -114,14 +114,14 @@ func (pack *ModPack) download(url string) error {
 
 func (pack *ModPack) processManifest() error {
 	// Open the pack.zip and parse the manifest
-	pack, err := zip.OpenReader(filepath.Join(pack.gamePath, "pack.zip"))
+	zipFile, err := zip.OpenReader(filepath.Join(pack.gamePath, "pack.zip"))
 	if err != nil {
 		return fmt.Errorf("Failed to open pack.zip: %v", err)
 	}
-	defer pack.Close()
+	defer zipFile.Close()
 
 	// Find the manifest file and decode it
-	pack.manifest, err = findJSONFile(pack, "manifest.json")
+	pack.manifest, err = findJSONFile(zipFile, "manifest.json")
 	if err != nil {
 		return err
 	}
@@ -392,17 +392,17 @@ func (pack *ModPack) installModURL(url string) (string, error) {
 
 func (pack *ModPack) installOverrides() error {
 	// Open the pack.zip
-	pack, err := zip.OpenReader(filepath.Join(pack.gamePath, "pack.zip"))
+	zipFile, err := zip.OpenReader(filepath.Join(pack.gamePath, "pack.zip"))
 	if err != nil {
 		return fmt.Errorf("Failed to open pack.zip: %v", err)
 	}
-	defer pack.Close()
+	defer zipFile.Close()
 
 	fmt.Printf("Installing files from modpack archive\n")
 
 	// Walk over every file in the pack that is prefixed with installOverrides
 	// and write it out
-	for _, f := range pack.File {
+	for _, f := range zipFile.File {
 		if !strings.HasPrefix(f.Name, "overrides/") {
 			continue
 		}
