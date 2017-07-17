@@ -41,8 +41,8 @@ var gCommands = map[string]command{
 	"pack.create": command{
 		Fn:        cmdPackCreate,
 		Desc:      "Create a new mod pack",
-		ArgsCount: 3,
-		Args:      "<directory> <minecraft version> <forge version>",
+		ArgsCount: 2,
+		Args:      "<directory> <minecraft version> [<forge version>]",
 	},
 	"pack.install": command{
 		Fn:        cmdPackInstall,
@@ -90,6 +90,20 @@ func cmdPackCreate() error {
 	dir := flag.Arg(1)
 	minecraftVsn := flag.Arg(2)
 	forgeVsn := flag.Arg(3)
+
+	// If no forge version was specified, open the database and find
+	// a recommended one
+	if forgeVsn == "" {
+		db, err := OpenDatabase()
+		if err != nil {
+			return err
+		}
+
+		forgeVsn, err = db.lookupForgeVsn(minecraftVsn)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Create a new pack directory
 	cp, err := NewModPack(dir, false, ARG_MMC)

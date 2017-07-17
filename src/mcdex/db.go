@@ -125,6 +125,18 @@ func getLatestVersion() (string, error) {
 	return strings.TrimSpace(buf.String()), nil
 }
 
+func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
+	var forgeVsn string
+	err := db.sqlDb.QueryRow("select version from forge where mcvsn = ? and isrec = 1", mcvsn).Scan(&forgeVsn)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No Forge version found for %s", mcvsn)
+	case err != nil:
+		return "", err
+	}
+	return forgeVsn, nil
+}
+
 func (db *Database) listMods(name, mcvsn string) error {
 	// Turn the name into a pre-compiled regex
 	nameRegex, err := regexp.Compile(name)
