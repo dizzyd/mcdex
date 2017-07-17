@@ -73,14 +73,14 @@ var gCommands = map[string]command{
 		ArgsCount: 2,
 		Args:      "<directory> <mod name or URL> [<tag>]",
 	},
-	"installServer": command{
-		Fn:        cmdInstallServer,
+	"server.install": command{
+		Fn:        cmdServerInstall,
 		Desc:      "Install a Minecraft server using an existing pack",
 		ArgsCount: 1,
 		Args:      "<directory>",
 	},
-	"updateDB": command{
-		Fn:        cmdUpdateDB,
+	"db.update": command{
+		Fn:        cmdDBUpdate,
 		Desc:      "Update local database of available mods",
 		ArgsCount: 0,
 	},
@@ -246,7 +246,7 @@ func cmdModFind() error {
 	return db.listMods(name, mcvsn)
 }
 
-func cmdInstallServer() error {
+func cmdServerInstall() error {
 	dir := flag.Arg(1)
 
 	if ARG_MMC == true {
@@ -277,7 +277,7 @@ func cmdInstallServer() error {
 	// java -jar <forge.jar>
 }
 
-func cmdUpdateDB() error {
+func cmdDBUpdate() error {
 	return InstallDatabase()
 }
 

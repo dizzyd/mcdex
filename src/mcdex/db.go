@@ -43,7 +43,7 @@ func OpenDatabase() (*Database, error) {
 
 	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
 	if !fileExists(db.sqlDbPath) {
-		return nil, fmt.Errorf("No database available; use updateDB command first")
+		return nil, fmt.Errorf("No database available; use db.update command first")
 	}
 
 	sqlDb, err := sql.Open("sqlite3", db.sqlDbPath)
