@@ -12,13 +12,21 @@ You can find the most recent releases here:
 * [Linux](http://files.mcdex.net/releases/linux/mcdex)
 * [OSX](http://files.mcdex.net/releases/osx/mcdex)
 
+## Getting started
+
+First, make sure you have the most recent database of mods:
+
+```
+mcdex db.update
+```
+
 ## Installing a modpack from Curseforge
 
 Let's install the [Age of Engineering](https://minecraft.curseforge.com/projects/age-of-engineering) modpack.
 
-First, find the modpack URL on Curseforge. Then on the console, run:
+Find the modpack URL on Curseforge. Then on the console, run:
 ```
-mcdex installPack aoe1.0.3 https://minecraft.curseforge.com/projects/age-of-engineering/files/2446286
+mcdex pack.install aoe1.0.3 https://minecraft.curseforge.com/projects/age-of-engineering/files/2446286
 ```
 
 Note that we provide the name "aoe1.0.3"; mcdex uses this to install the modpack into your Minecraft home directory
@@ -29,20 +37,26 @@ Once the install is done, you can fire up the Minecraft launcher and you should 
 
 ## Creating a new modpack
 
-We can start a new modpack by using the ```createPack``` command:
+We can start a new modpack by using the ```pack.create``` command:
 
 ```
-mcdex createPack mypack 1.11.2 13.20.1.2386
+mcdex pack.create mypack 1.11.2
 ```
 
-Again, since we passed a non-absolute filename, the pack will be created under the Minecraft home directory. If we wanted to create
-the modpack in our home directory (on OSX), we would do:
+Note that the recommended version of Forge is installed automatically. If you want to force a specific Forge to be used,
+you can do
+```
+mcdex pack.create mypack 1.11.2 13.20.1.2386
+```
+
+As before, since we passed a non-absolute filename - 'mypack' - the pack will be created under the Minecraft home directory. 
+If we wanted to create the modpack in our home directory (on OSX), we would do:
 
 ```
-mcdex createPack /Users/dizzyd/mypack 1.11.2 13.20.1.2386
+mcdex pack.create /Users/dizzyd/mypack 1.11.2
 ```
 
-```createPack``` will create the directory, make sure the appropriate version of Forge is installed and start a manifest.json. 
+```pack.create``` will create the directory, make sure the appropriate version of Forge is installed and start a manifest.json. 
 In addition, it will create an entry in the Minecraft launcher so you can launch the pack.
 
 ## Installing individual mods
@@ -51,14 +65,26 @@ Once you have a modpack, either installed from CurseForge or one you created loc
 add [Immersive Engineering](https://minecraft.curseforge.com/projects/immersive-engineering) to our new pack:
 
 ```
-mcdex registerMod mypack https://minecraft.curseforge.com/projects/immersive-engineering/files/2443553
+mcdex mod.select mypack 'Immersive Engineering'
 ```
 
-This will add the entry for the file to your manifest.json, but not immediately download anything.. To actually download the mod, 
-you need to install the pack:
+This will search the database of mods for one named 'Immersive Engineering' and find the most recent stable version and
+add it to the pack's manifest.jason. To actually install the mod, you need to install the pack:
 
 ```
-mcdex installPack mypack
+mcdex pack.install mypack
 ```
 
+## Listing available mods
 
+If you want to find all the mods with 'Map' in the name, you can do:
+
+```
+mcdex mod.list Map
+```
+
+Alternatively, if you want to only look for mods with 'Map' that work on 1.10.2, you can do:
+
+```
+mcdex mod.list Map 1.10.2
+```
