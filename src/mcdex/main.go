@@ -356,10 +356,3 @@ func main() {
 		log.Fatalf("%+v\n", err)
 	}
 }
-
-//mcdex update - download latest mcdex.sqlite
-//mcdex forge.install <name> [<vsn>]
-//mcdex forge.list
-
-//mcdex init <name> <vsn> <desc>
-//mcdex install <modname> [<vsn>]
