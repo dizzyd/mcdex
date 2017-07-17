@@ -55,11 +55,11 @@ var gCommands = map[string]command{
 		Desc:      "Show runtime info",
 		ArgsCount: 0,
 	},
-	"mod.find": command{
-		Fn:        cmdModFind,
-		Desc:      "Find mods matching a name and Minecraft version",
-		ArgsCount: 2,
-		Args:      "<mod name> <minecraft version>",
+	"mod.list": command{
+		Fn:        cmdModList,
+		Desc:      "List mods matching a name and Minecraft version",
+		ArgsCount: 1,
+		Args:      "<mod name> [<minecraft version>]",
 	},
 	"mod.select": command{
 		Fn:        cmdModSelect,
@@ -234,7 +234,7 @@ func _modSelect(clientOnly bool) error {
 	return nil
 }
 
-func cmdModFind() error {
+func cmdModList() error {
 	name := flag.Arg(1)
 	mcvsn := flag.Arg(2)
 

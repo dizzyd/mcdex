@@ -144,7 +144,12 @@ func (db *Database) listMods(name, mcvsn string) error {
 		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
 	}
 
-	rows, err := db.sqlDb.Query("select name, description from mods where rowid in (select modid from filevsns where version = ?);", mcvsn)
+	query := "select name, description from mods where rowid in (select modid from filevsns where version = ?) order by name"
+	if mcvsn == "" {
+		query = "select name, description from mods order by name"
+	}
+
+	rows, err := db.sqlDb.Query(query, mcvsn)
 	if err != nil {
 		return fmt.Errorf("Query failed: %+v", err)
 	}
