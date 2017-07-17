@@ -84,6 +84,12 @@ var gCommands = map[string]command{
 		Desc:      "Update local database of available mods",
 		ArgsCount: 0,
 	},
+	"forge.list": command{
+		Fn:        cmdForgeList,
+		Desc:      "List available versions of Forge",
+		ArgsCount: 1,
+		Args:      "<minecraft version>",
+	},
 }
 
 func cmdPackCreate() error {
@@ -244,6 +250,17 @@ func cmdModList() error {
 	}
 
 	return db.listMods(name, mcvsn)
+}
+
+func cmdForgeList() error {
+	mcvsn := flag.Arg(1)
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	return db.listForge(mcvsn, ARG_VERBOSE)
 }
 
 func cmdServerInstall() error {

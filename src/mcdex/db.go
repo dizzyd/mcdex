@@ -125,6 +125,37 @@ func getLatestVersion() (string, error) {
 	return strings.TrimSpace(buf.String()), nil
 }
 
+func (db *Database) listForge(mcvsn string, verbose bool) error {
+	rows, err := db.sqlDb.Query("select version, isrec from forge where mcvsn = ? order by version desc", mcvsn)
+	switch {
+	case err == sql.ErrNoRows:
+		return fmt.Errorf("No Forge version found for %s", mcvsn)
+	case err != nil:
+		return err
+	}
+
+	latest := false
+
+	defer rows.Close()
+	for rows.Next() {
+		var version string
+		var isrec bool
+		err := rows.Scan(&version, &isrec)
+		if err != nil {
+			return err
+		}
+		if isrec {
+			fmt.Printf("%s (recommended)\n", version)
+		} else if !latest {
+			fmt.Printf("%s (latest)\n", version)
+			latest = true
+		} else if verbose {
+			fmt.Printf("%s\n", version)
+		}
+	}
+	return nil
+}
+
 func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
 	var forgeVsn string
 	err := db.sqlDb.QueryRow("select version from forge where mcvsn = ? and isrec = 1", mcvsn).Scan(&forgeVsn)
