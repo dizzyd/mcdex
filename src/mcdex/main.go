@@ -235,8 +235,8 @@ func _modSelect(clientOnly bool) error {
 }
 
 func cmdModFind() error {
-	mcvsn := flag.Arg(1)
-	name := flag.Arg(2)
+	name := flag.Arg(1)
+	mcvsn := flag.Arg(2)
 
 	db, err := OpenDatabase()
 	if err != nil {
