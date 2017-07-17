@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -305,8 +306,15 @@ func console(f string, args ...interface{}) {
 func usage() {
 	console("usage: mcdex [<options>] <command> [<args>]\n")
 	console(" commands:\n")
-	for id, cmd := range gCommands {
-		console(" - %s: %s\n", id, cmd.Desc)
+
+	// Sort the list of keys in gCommands
+	keys := []string{}
+	for k := range gCommands {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, cmd := range keys {
+		console(" - %s: %s\n", cmd, gCommands[cmd].Desc)
 	}
 }
 
