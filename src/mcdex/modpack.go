@@ -45,7 +45,7 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 	if dir == "." {
 		pack.rootPath, _ = os.Getwd()
 		pack.name = filepath.Base(dir)
-	} else if strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "C:") {
+	} else if filepath.IsAbs(dir) {
 		pack.rootPath = dir
 		pack.name = filepath.Base(dir)
 	} else {
