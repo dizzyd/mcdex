@@ -192,8 +192,24 @@ func cmdPackInstall() error {
 }
 
 func cmdInfo() error {
-	fmt.Printf("Version: %+s\n", version)
-	fmt.Printf("Env: %+v\n", env())
+	// Try to retrieve the latest available version info
+	publishedVsn, err := getLatestVersion("release")
+
+	if err != nil && ARG_VERBOSE {
+		fmt.Printf("%s\n", err)
+	}
+
+	if err == nil && publishedVsn != "" && version != publishedVsn {
+		fmt.Printf("Version: %s (%s is available for download)\n", version, publishedVsn)
+	} else {
+		fmt.Printf("Version: %s\n", version)
+	}
+
+	// Print the environment
+	fmt.Printf("Environment:\n")
+	fmt.Printf("* Minecraft dir: %s\n", env().MinecraftDir)
+	fmt.Printf("* mcdex dir: %s\n", env().McdexDir)
+	fmt.Printf("* Java dir: %s\n", env().JavaDir)
 	return nil
 }
 

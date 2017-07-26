@@ -20,6 +20,7 @@ package main
 import (
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -151,4 +152,21 @@ func fileExists(filename string) bool {
 func dirExists(dirname string) bool {
 	stat, err := os.Stat(dirname)
 	return err == nil && stat.IsDir()
+}
+
+func getLatestVersion(vsnType string) (string, error) {
+	res, e := HttpGet(fmt.Sprintf("http://files.mcdex.net/%s/latest", vsnType))
+	if e != nil {
+		return "", fmt.Errorf("Failed to retrieve latest %s version: %+v", vsnType, e)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return "", fmt.Errorf("Failed to retrieve latest %s version: %d", vsnType, res.StatusCode)
+	}
+
+	// Dump the body into a string
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(res.Body)
+	return strings.TrimSpace(buf.String()), nil
 }

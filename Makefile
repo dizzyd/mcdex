@@ -8,12 +8,14 @@ DOCKER_ARGS := -v $(shell pwd)/bin/docker:/mcdex/bin -w /mcdex mcdex
 
 all:
 	go install $(GOVSNFLAG) $(APPS)
+	echo $(VSN) > mcdex.latest
 
 clean:
 	rm -rf pkg
 	rm -rf bin
 
 publish: clean all docker
+	aws --profile mcdex s3 cp mcdex.latest s3://files.mcdex.net/releases/latest
 	aws --profile mcdex s3 cp bin/mcdex s3://files.mcdex.net/releases/osx/mcdex
 	aws --profile mcdex s3 cp bin/docker/mcdex s3://files.mcdex.net/releases/linux/mcdex
 	aws --profile mcdex s3 cp bin/docker/windows_386/mcdex.exe s3://files.mcdex.net/releases/win32/mcdex.exe

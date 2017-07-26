@@ -19,14 +19,12 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"compress/bzip2"
 	"database/sql"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"regexp"
 
@@ -58,7 +56,7 @@ func OpenDatabase() (*Database, error) {
 
 func InstallDatabase() error {
 	// Get the latest version
-	version, err := getLatestVersion()
+	version, err := getLatestVersion("data")
 	if err != nil {
 		return err
 	}
@@ -110,19 +108,6 @@ func InstallDatabase() error {
 	fmt.Printf("Updated mod database.\n")
 
 	return nil
-}
-
-func getLatestVersion() (string, error) {
-	res, e := HttpGet("http://files.mcdex.net/data/latest")
-	if e != nil {
-		return "", fmt.Errorf("Failed to retrieve data/latest: %+v", e)
-	}
-	defer res.Body.Close()
-
-	// Dump the body into a string
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(res.Body)
-	return strings.TrimSpace(buf.String()), nil
 }
 
 func (db *Database) listForge(mcvsn string, verbose bool) error {
