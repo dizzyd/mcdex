@@ -18,11 +18,9 @@
 package main
 
 import (
-	"bufio"
 	"compress/bzip2"
 	"database/sql"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -65,25 +63,16 @@ func InstallDatabase() error {
 	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
-		return fmt.Errorf("Failed to retrieve %s data file: %+v", err)
+		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
 	}
 	defer res.Body.Close()
 
 	// Stream the data file to mcdex.dat.tmp
 	tmpFileName := filepath.Join(env().McdexDir, "mcdex.dat.tmp")
-	tmpFile, err := os.Create(tmpFileName)
+	err = writeStream(tmpFileName, bzip2.NewReader(res.Body))
 	if err != nil {
-		return fmt.Errorf("Failed to create mcdex.dat.tmp: %+v", err)
+		return err
 	}
-	defer tmpFile.Close()
-
-	writer := bufio.NewWriter(tmpFile)
-
-	_, err = io.Copy(writer, bzip2.NewReader(res.Body))
-	if err != nil {
-		return fmt.Errorf("Failed to write mcdex.dat.tmp: %+v", err)
-	}
-	writer.Flush()
 
 	// Open the temporary database and validate it
 	tmpDb, err := sql.Open("sqlite3", tmpFileName)
@@ -95,9 +84,12 @@ func InstallDatabase() error {
 
 	_, err = tmpDb.Exec("PRAGMA integrity_check;")
 	if err != nil {
-		tmpDb.Close()
 		return nil
 	}
+
+	// Force the tmpDb to close so that (on Windows), we can ensure
+	// the rename works
+	tmpDb.Close()
 
 	// Close the database and rename the tmp file
 	err = os.Rename(tmpFileName, filepath.Join(env().McdexDir, "mcdex.dat"))
