@@ -197,8 +197,16 @@ func (pack *ModPack) createLauncherProfile() error {
 	}
 
 	fmt.Printf("Creating profile: %s\n", pack.name)
-	lc.createProfile(pack.name, forgeID, pack.gamePath)
-	lc.save()
+	err = lc.createProfile(pack.name, forgeID, pack.gamePath)
+	if err != nil {
+		return fmt.Errorf("failed to create profile: %+v", err)
+	}
+
+	err = lc.save()
+	if err != nil {
+		return fmt.Errorf("failed to save profile: %+v", err)
+	}
+	os.Exit(1)
 
 	return nil
 }
@@ -320,8 +328,7 @@ func (pack *ModPack) selectMod(url, name string, clientOnly bool) error {
 
 func (pack *ModPack) saveManifest() error {
 	// Write the manifest file
-	manifestStr := pack.manifest.StringIndent("", "  ")
-	err := ioutil.WriteFile(filepath.Join(pack.gamePath, "manifest.json"), []byte(manifestStr), 0644)
+	err := writeJSON(pack.manifest, filepath.Join(pack.gamePath, "manifest.json"))
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
