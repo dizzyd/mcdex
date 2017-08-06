@@ -206,7 +206,6 @@ func (pack *ModPack) createLauncherProfile() error {
 	if err != nil {
 		return fmt.Errorf("failed to save profile: %+v", err)
 	}
-	os.Exit(1)
 
 	return nil
 }
