@@ -26,7 +26,7 @@ import (
 	"github.com/Jeffail/gabs"
 )
 
-var nameRegex = regexp.MustCompile("^\\w+$")
+var nameRegex = regexp.MustCompile("^[\\w][\\w-.]*$")
 
 type launcherConfig struct {
 	data      *gabs.Container
@@ -65,5 +65,5 @@ func (lc *launcherConfig) createProfile(name, version, gameDir string) error {
 }
 
 func (lc *launcherConfig) save() error {
-	return ioutil.WriteFile(lc.filename, lc.data.Bytes(), 0644)
+	return writeJSON(lc.data, lc.filename)
 }
