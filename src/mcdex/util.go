@@ -23,6 +23,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
@@ -169,4 +170,9 @@ func getLatestVersion(vsnType string) (string, error) {
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(res.Body)
 	return strings.TrimSpace(buf.String()), nil
+}
+
+func writeJSON(json *gabs.Container, filename string) error {
+	jsonStr := json.StringIndent("", " ")
+	return ioutil.WriteFile(filename, []byte(jsonStr), 0644)
 }
