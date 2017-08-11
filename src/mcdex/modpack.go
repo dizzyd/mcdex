@@ -83,9 +83,22 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 }
 
 func (pack *ModPack) download(url string) error {
-	// If the pack.zip file already exists, shortcut out
+	// Check for a pack.url file; we use this to track where the pack
+	// file came from so that we can re-download the pack when it changes.
+	// This supports the use case of installing v 1.0.x of a pack and then updating
+	// to 1.0.x+1 in the same directory
+	packURLFile := filepath.Join(pack.gamePath, "pack.url")
+	origURL, _ := readStringFile(packURLFile)
+	origURL = strings.TrimSpace(origURL)
+
 	packFilename := filepath.Join(pack.gamePath, "pack.zip")
-	if fileExists(packFilename) {
+
+	if origURL != url {
+		// Remove pack.zip and all mod files
+		os.Remove(packFilename)
+		os.RemoveAll(pack.modPath)
+
+	} else if fileExists(packFilename) {
 		return nil
 	}
 
@@ -109,7 +122,13 @@ func (pack *ModPack) download(url string) error {
 	defer resp.Body.Close()
 
 	// Store pack.zip in the working dir
-	return writeStream(packFilename, resp.Body)
+	err = writeStream(packFilename, resp.Body)
+	if err != nil {
+		return err
+	}
+
+	// Note the URL from which we downloaded the pack
+	return writeStringFile(packURLFile, url)
 }
 
 func (pack *ModPack) processManifest() error {
