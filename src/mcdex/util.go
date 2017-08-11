@@ -176,3 +176,16 @@ func writeJSON(json *gabs.Container, filename string) error {
 	jsonStr := json.StringIndent("", " ")
 	return ioutil.WriteFile(filename, []byte(jsonStr), 0644)
 }
+
+func readStringFile(filename string) (string, error) {
+	data, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
+}
+
+func writeStringFile(filename, data string) error {
+	return ioutil.WriteFile(filename, []byte(data), 0644)
+}
