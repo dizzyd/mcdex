@@ -30,6 +30,7 @@ var version string
 
 var ARG_MMC bool
 var ARG_VERBOSE bool
+var ARG_SKIPMODS bool
 
 type command struct {
 	Fn        func() error
@@ -182,10 +183,12 @@ func cmdPackInstall() error {
 		}
 	}
 
-	// Install mods (include client-side only mods)
-	err = cp.installMods(true)
-	if err != nil {
-		return err
+	if ARG_SKIPMODS == false {
+		// Install mods (include client-side only mods)
+		err = cp.installMods(true)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -338,6 +341,7 @@ func main() {
 	// Register
 	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
+	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
 
 	// Process command-line args
 	flag.Parse()
