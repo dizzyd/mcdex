@@ -202,3 +202,27 @@ func (db *Database) findModFile(name, mcvsn string) (string, error) {
 	}
 	return url, nil
 }
+
+func (db *Database) findModFileByUrl(url, mcvsn string) (string, error) {
+	// First, look up the modid for the given name
+	var modid int
+	err := db.sqlDb.QueryRow("select rowid from mods where url = ?", url).Scan(&modid)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No mod found %s", url)
+	case err != nil:
+		return "", err
+	}
+
+	// Now find the latest release or beta version
+	var fileUrl string
+	err = db.sqlDb.QueryRow("select url from files where rowid in (select fileid from filevsns where modid=? and version=? order by tstamp desc limit 1)",
+		modid, mcvsn).Scan(&fileUrl)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No file found for %s on Minecraft %s", url, mcvsn)
+	case err != nil:
+		return "", err
+	}
+	return url, nil
+}
