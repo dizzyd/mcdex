@@ -189,3 +189,12 @@ func readStringFile(filename string) (string, error) {
 func writeStringFile(filename, data string) error {
 	return ioutil.WriteFile(filename, []byte(data), 0644)
 }
+
+func parseVersion(mcVersion string) (primaryVsn, secondaryVsn string) {
+	parts := strings.SplitN(mcVersion, ".", 3)
+	if len(parts) > 2 {
+		return mcVersion, fmt.Sprintf("%s.%s", parts[0], parts[1])
+	} else {
+		return mcVersion, ""
+	}
+}

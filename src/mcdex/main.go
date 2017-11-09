@@ -242,10 +242,18 @@ func _modSelect(clientOnly bool) error {
 			return err
 		}
 
-		// Lookup the URL for the mod
-		mod, err = db.findModFile(mod, cp.minecraftVersion())
+		// Get the primary and secondary versions (e.g. if mcVersion is 1.12.2, we want to check first
+		// for a mod with 1.12.2 and then fallback to 1.12)
+		primaryVsn, secondaryVsn := parseVersion(cp.minecraftVersion())
+
+		// First, look for mod with primary version
+		mod, err = db.findModFile(mod, primaryVsn)
 		if err != nil {
-			return err
+			// Try again with secondary version
+			mod, err = db.findModFile(mod, secondaryVsn)
+			if err != nil {
+				return err
+			}
 		}
 
 	} else if !strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
