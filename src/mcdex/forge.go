@@ -100,18 +100,31 @@ func installClientForge(minecraftVsn, forgeVsn string) (string, error) {
 		return forgeIDStr(minecraftVsn, forgeVsn), nil
 	}
 
-	// Construct the download URL
-	forgeURL := fmt.Sprintf("http://files.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar",
-		minecraftVsn, forgeVsn, minecraftVsn, forgeVsn)
+	// Choose the right format for the download URL; some older versions
+	// of Forge are a tad inconsistent
+	var forgeURL string
+	switch minecraftVsn {
+	case "1.7.10":
+		forgeURL = fmt.Sprintf("http://files.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s-%s/forge-%s-%s-%s-installer.jar",
+			minecraftVsn, forgeVsn, minecraftVsn, minecraftVsn, forgeVsn, minecraftVsn)
+	default:
+		forgeURL = fmt.Sprintf("http://files.minecraftforge.net/maven/net/minecraftforge/forge/%s-%s/forge-%s-%s-installer.jar",
+			minecraftVsn, forgeVsn, minecraftVsn, forgeVsn)
+	}
 
+	// Construct the download URL
 	fmt.Printf("Downloading Forge %s\n", forgeVsn)
 
 	// Download the Forge installer (into memory)
 	resp, err := HttpGet(forgeURL)
 	if err != nil {
-		return "", fmt.Errorf("failed to download Forge %s: %+v", forgeVsn, err)
+		return "", fmt.Errorf("download failed: %+v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("HTTP error %d", resp.StatusCode)
+	}
 
 	installerBytes, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
