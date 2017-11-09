@@ -236,7 +236,7 @@ func _modSelect(clientOnly bool) error {
 	}
 
 	// If the mod doesn't start with https://, assume it's a name and try to look it up
-	if !strings.HasPrefix("https://", mod) {
+	if !strings.HasPrefix(mod, "https://") {
 		db, err := OpenDatabase()
 		if err != nil {
 			return err
@@ -248,7 +248,7 @@ func _modSelect(clientOnly bool) error {
 			return err
 		}
 
-	} else if strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
+	} else if !strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
 		return fmt.Errorf("Non-CurseForge URLs must include a tag argument")
 	}
 
