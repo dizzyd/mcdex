@@ -247,25 +247,21 @@ func _modSelect(clientOnly bool) error {
 		primaryVsn, secondaryVsn := parseVersion(cp.minecraftVersion())
 
 		// First, look for mod with primary version
-		mod, err = db.findModFile(mod, primaryVsn)
+		modFile, err := db.findModFile(mod, primaryVsn)
 		if err != nil {
 			// Try again with secondary version
-			mod, err = db.findModFile(mod, secondaryVsn)
+			modFile, err = db.findModFile(mod, secondaryVsn)
 			if err != nil {
 				return err
 			}
 		}
+		return cp.selectModFile(modFile, clientOnly)
 
 	} else if !strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
 		return fmt.Errorf("Non-CurseForge URLs must include a tag argument")
+	} else {
+		return cp.selectModURL(mod, tag, clientOnly)
 	}
-
-	err = cp.selectMod(mod, tag, clientOnly)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func cmdModList() error {

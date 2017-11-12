@@ -280,67 +280,58 @@ func (pack *ModPack) installMods(isClient bool) error {
 	return nil
 }
 
-func (pack *ModPack) selectMod(url, name string, clientOnly bool) error {
-	// If the URL doesn't contain minecraft.curseforge.com, assume we're only being given
-	// the URL and a tagname (to be registered in extfiles)
-	if !strings.Contains(url, "minecraft.curseforge.com") {
-		// Insert the url by name into extfiles map
-		pack.manifest.Set(url, "extfiles", name)
-
-		fmt.Printf("Registered %s as %s (clientOnly=%t)\n", url, name, clientOnly)
-	} else {
-		cfile, err := getCurseForgeFile(url)
-		if err != nil {
-			return err
-		}
-
-		// Make sure files entry exists in manifest
-		if !pack.manifest.Exists("files") {
-			pack.manifest.ArrayOfSizeP(0, "files")
-		}
-
-		// Add project & file IDs to manifest
-		modInfo := make(map[string]interface{})
-		modInfo["projectID"] = cfile.ProjectID
-		modInfo["fileID"] = cfile.ID
-		modInfo["required"] = true
-		modInfo["desc"] = cfile.Desc
-
-		if clientOnly {
-			modInfo["clientOnly"] = true
-		}
-
-		// Walk through the list of files; if we find one with same project ID, delete it
-		existingIndex := -1
-		files, _ := pack.manifest.S("files").Children()
-		for i, child := range files {
-			childProjectID := int(child.S("projectID").Data().(float64))
-			if childProjectID == cfile.ProjectID {
-				// Found a matching project ID; note the index so we can replace it
-				existingIndex = i
-
-				// Also, delete any mod files listed by name
-				filename, ok := child.S("filename").Data().(string)
-				filename = filepath.Join(pack.modPath, filename)
-				if ok && fileExists(filename) {
-					// Try to remove the file; don't worry about error case
-					os.Remove(filename)
-				}
-
-				break
-			}
-		}
-
-		if existingIndex > -1 {
-			pack.manifest.S("files").SetIndex(modInfo, existingIndex)
-		} else {
-			pack.manifest.ArrayAppendP(modInfo, "files")
-		}
-
-		fmt.Printf("Registered %s (clientOnly=%t)\n", cfile.Desc, clientOnly)
+func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
+	// Make sure files entry exists in manifest
+	if !pack.manifest.Exists("files") {
+		pack.manifest.ArrayOfSizeP(0, "files")
 	}
 
-	// Finally, update the manifest file
+	// Add project & file IDs to manifest
+	modInfo := make(map[string]interface{})
+	modInfo["projectID"] = modFile.modID
+	modInfo["fileID"] = modFile.fileID
+	modInfo["required"] = true
+	modInfo["desc"] = modFile.modName
+
+	if clientOnly {
+		modInfo["clientOnly"] = true
+	}
+
+	// Walk through the list of files; if we find one with same project ID, delete it
+	existingIndex := -1
+	files, _ := pack.manifest.S("files").Children()
+	for i, child := range files {
+		childProjectID := int(child.S("projectID").Data().(float64))
+		if childProjectID == modFile.modID {
+			// Found a matching project ID; note the index so we can replace it
+			existingIndex = i
+
+			// Also, delete any mod files listed by name
+			filename, ok := child.S("filename").Data().(string)
+			filename = filepath.Join(pack.modPath, filename)
+			if ok && fileExists(filename) {
+				// Try to remove the file; don't worry about error case
+				os.Remove(filename)
+			}
+
+			break
+		}
+	}
+
+	if existingIndex > -1 {
+		pack.manifest.S("files").SetIndex(modInfo, existingIndex)
+	} else {
+		pack.manifest.ArrayAppendP(modInfo, "files")
+	}
+
+	fmt.Printf("Registered %s (clientOnly=%t)\n", modFile.modName, clientOnly)
+	return pack.saveManifest()
+}
+
+func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
+	// Insert the url by name into extfiles map
+	pack.manifest.Set(url, "extfiles", name)
+	fmt.Printf("Registered %s as %s (clientOnly=%t)\n", url, name, clientOnly)
 	return pack.saveManifest()
 }
 

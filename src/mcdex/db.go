@@ -21,6 +21,7 @@ import (
 	"compress/bzip2"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -32,6 +33,7 @@ import (
 type Database struct {
 	sqlDb     *sql.DB
 	sqlDbPath string
+	version   string
 }
 
 func OpenDatabase() (*Database, error) {
@@ -47,7 +49,21 @@ func OpenDatabase() (*Database, error) {
 		return nil, err
 	}
 
+	_, err = sqlDb.Exec("PRAGMA integrity_check;")
+	if err != nil {
+		return nil, err
+	}
+
 	db.sqlDb = sqlDb
+
+	vsn, err := db.getMeta("version")
+	if vsn != "" {
+		db.version = vsn
+	} else {
+		// Assume version 1; log error for posterity
+		db.version = "1"
+		log.Printf("Reading version error: %+v\n", err)
+	}
 
 	return db, nil
 }
@@ -60,7 +76,7 @@ func InstallDatabase() error {
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
-	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-%s.dat.bz2", version)
+	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v2-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
@@ -100,6 +116,18 @@ func InstallDatabase() error {
 	fmt.Printf("Updated mod database.\n")
 
 	return nil
+}
+
+func (db *Database) getMeta(key string) (string, error) {
+	var value string
+	err := db.sqlDb.QueryRow("select value from meta where key = ?", key).Scan(&value)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No %s found in meta table", key)
+	case err != nil:
+		return "", err
+	}
+	return value, nil
 }
 
 func (db *Database) listForge(mcvsn string, verbose bool) error {
@@ -152,7 +180,7 @@ func (db *Database) listMods(name, mcvsn string) error {
 		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
 	}
 
-	query := "select name, description from mods where rowid in (select modid from filevsns where version = ?) order by name"
+	query := "select name, description from mods where modid in (select modid from modfiles where version = ?) order by name"
 	if mcvsn == "" {
 		query = "select name, description from mods order by name"
 	}
@@ -179,50 +207,28 @@ func (db *Database) listMods(name, mcvsn string) error {
 	return nil
 }
 
-func (db *Database) findModFile(name, mcvsn string) (string, error) {
+func (db *Database) findModFile(name, mcvsn string) (*ModFile, error) {
 	// First, look up the modid for the given name
 	var modid int
-	err := db.sqlDb.QueryRow("select rowid from mods where name = ?", name).Scan(&modid)
+	var desc string
+	err := db.sqlDb.QueryRow("select modid, description from mods where name = ?", name).Scan(&modid, &desc)
 	switch {
 	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No mod found %s", name)
+		return nil, fmt.Errorf("No mod found %s", name)
 	case err != nil:
-		return "", err
+		return nil, err
 	}
 
 	// Now find the latest release or beta version
-	var url string
-	err = db.sqlDb.QueryRow("select url from files where rowid in (select fileid from filevsns where modid=? and version=? order by tstamp desc limit 1)",
-		modid, mcvsn).Scan(&url)
+	var fileid int
+	err = db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+		modid, mcvsn).Scan(&fileid)
 	switch {
 	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
+		return nil, fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
 	case err != nil:
-		return "", err
-	}
-	return url, nil
-}
-
-func (db *Database) findModFileByUrl(url, mcvsn string) (string, error) {
-	// First, look up the modid for the given name
-	var modid int
-	err := db.sqlDb.QueryRow("select rowid from mods where url = ?", url).Scan(&modid)
-	switch {
-	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No mod found %s", url)
-	case err != nil:
-		return "", err
+		return nil, err
 	}
 
-	// Now find the latest release or beta version
-	var fileUrl string
-	err = db.sqlDb.QueryRow("select url from files where rowid in (select fileid from filevsns where modid=? and version=? order by tstamp desc limit 1)",
-		modid, mcvsn).Scan(&fileUrl)
-	switch {
-	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No file found for %s on Minecraft %s", url, mcvsn)
-	case err != nil:
-		return "", err
-	}
-	return url, nil
+	return &ModFile{fileID: fileid, modID: modid, modName: name, modDesc: desc}, nil
 }
