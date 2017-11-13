@@ -340,10 +340,17 @@ func (pack *ModPack) updateMods(db *Database) error {
 	// appropriate version
 	files, _ := pack.manifest.S("files").Children()
 	for _, child := range files {
+		isLocked := child.Exists("locked") && child.S("locked").Data().(bool)
 		modID := int(child.S("projectID").Data().(float64))
 		fileID := int(child.S("fileID").Data().(float64))
 		latestFile, err := db.getLatestModFile(modID, pack.minecraftVersion())
 		if err == nil && latestFile.fileID > fileID {
+			// Skip locked mods that have an update available
+			if isLocked {
+				fmt.Printf("Skipping %s (locked)\n", latestFile.modName)
+				continue
+			}
+
 			// Save the more recent file ID
 			child.Set(latestFile.fileID, "fileID")
 			child.Set(latestFile.modName, "desc")
