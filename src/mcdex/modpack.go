@@ -342,12 +342,12 @@ func (pack *ModPack) updateMods(db *Database) error {
 	for _, child := range files {
 		modID := int(child.S("projectID").Data().(float64))
 		fileID := int(child.S("fileID").Data().(float64))
-		latestFileID := db.latestFileID(modID, pack.minecraftVersion())
-		if latestFileID > fileID {
+		latestFile, err := db.getLatestModFile(modID, pack.minecraftVersion())
+		if err == nil && latestFile.fileID > fileID {
 			// Save the more recent file ID
-			child.Set(latestFileID, "fileID")
-
-			fmt.Printf("Updating %s: %d -> %d\n", child.S("desc").Data().(string), fileID, latestFileID)
+			child.Set(latestFile.fileID, "fileID")
+			child.Set(latestFile.modName, "desc")
+			fmt.Printf("Updating %s: %d -> %d\n", latestFile.modName, fileID, latestFile.fileID)
 
 			// Delete the old file if it exists
 			filename, ok := child.S("filename").Data().(string)

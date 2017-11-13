@@ -233,13 +233,27 @@ func (db *Database) findModFile(name, mcvsn string) (*ModFile, error) {
 	return &ModFile{fileID: fileid, modID: modid, modName: name, modDesc: desc}, nil
 }
 
-func (db *Database) latestFileID(modID int, mcvsn string) int {
-	var fileID int
-	err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
-		modID, mcvsn).Scan(&fileID)
-	if err != nil {
-		return 0
+func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {
+	// First, look up the modid for the given name
+	var name, desc string
+	err := db.sqlDb.QueryRow("select name, description from mods where modid = ?", modID).Scan(&name, &desc)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, fmt.Errorf("No mod found %d", modID)
+	case err != nil:
+		return nil, err
 	}
 
-	return fileID
+	// Now find the latest release or beta version
+	var fileID int
+	err = db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+		modID, mcvsn).Scan(&fileID)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
+	case err != nil:
+		return nil, err
+	}
+
+	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
 }
