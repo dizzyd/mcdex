@@ -75,6 +75,12 @@ var gCommands = map[string]command{
 		ArgsCount: 2,
 		Args:      "<directory> <mod name or URL> [<tag>]",
 	},
+	"mod.update.all": command{
+		Fn:        cmdModUpdateAll,
+		Desc:      "Update all mods entries to latest available file",
+		ArgsCount: 1,
+		Args:      "<directory>",
+	},
 	"server.install": command{
 		Fn:        cmdServerInstall,
 		Desc:      "Install a Minecraft server using an existing pack",
@@ -274,6 +280,27 @@ func cmdModList() error {
 	}
 
 	return db.listMods(name, mcvsn)
+}
+
+func cmdModUpdateAll() error {
+	dir := flag.Arg(1)
+
+	cp, err := NewModPack(dir, true, ARG_MMC)
+	if err != nil {
+		return err
+	}
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	err = cp.updateMods(db)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func cmdForgeList() error {

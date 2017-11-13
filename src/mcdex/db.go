@@ -232,3 +232,14 @@ func (db *Database) findModFile(name, mcvsn string) (*ModFile, error) {
 
 	return &ModFile{fileID: fileid, modID: modid, modName: name, modDesc: desc}, nil
 }
+
+func (db *Database) latestFileID(modID int, mcvsn string) int {
+	var fileID int
+	err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+		modID, mcvsn).Scan(&fileID)
+	if err != nil {
+		return 0
+	}
+
+	return fileID
+}

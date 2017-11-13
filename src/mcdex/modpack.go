@@ -335,6 +335,34 @@ func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
 	return pack.saveManifest()
 }
 
+func (pack *ModPack) updateMods(db *Database) error {
+	// Walk over each file, looking for a more recent file ID for the
+	// appropriate version
+	files, _ := pack.manifest.S("files").Children()
+	for _, child := range files {
+		modID := int(child.S("projectID").Data().(float64))
+		fileID := int(child.S("fileID").Data().(float64))
+		latestFileID := db.latestFileID(modID, pack.minecraftVersion())
+		if latestFileID > fileID {
+			// Save the more recent file ID
+			child.Set(latestFileID, "fileID")
+
+			fmt.Printf("Updating %s: %d -> %d\n", child.S("desc").Data().(string), fileID, latestFileID)
+
+			// Delete the old file if it exists
+			filename, ok := child.S("filename").Data().(string)
+			filename = filepath.Join(pack.modPath, filename)
+			if ok && fileExists(filename) {
+				// Try to remove the file; don't worry about error case
+				os.Remove(filename)
+			}
+			child.Delete("filename")
+		}
+	}
+
+	return pack.saveManifest()
+}
+
 func (pack *ModPack) saveManifest() error {
 	// Write the manifest file
 	err := writeJSON(pack.manifest, filepath.Join(pack.gamePath, "manifest.json"))
