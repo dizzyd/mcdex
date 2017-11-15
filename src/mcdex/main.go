@@ -21,9 +21,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
+	"regexp"
 	"sort"
-	"strings"
+	"strconv"
 )
 
 var version string
@@ -230,6 +232,8 @@ func cmdModSelectClient() error {
 	return _modSelect(true)
 }
 
+var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
+
 func _modSelect(clientOnly bool) error {
 	dir := flag.Arg(1)
 	mod := flag.Arg(2)
@@ -241,33 +245,72 @@ func _modSelect(clientOnly bool) error {
 		return err
 	}
 
-	// If the mod doesn't start with https://, assume it's a name and try to look it up
-	if !strings.HasPrefix(mod, "https://") {
-		db, err := OpenDatabase()
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	var modID int
+	var fileID int
+
+	// Try to parse the mod as a URL
+	url, err := url.Parse(mod)
+	if err == nil {
+		// We have a URL; if it's not a CurseForge URL, treat it as an external file
+		if url.Host != "minecraft.curseforge.com" {
+			return cp.selectModURL(mod, tag, clientOnly)
+		}
+
+		// Otherwise, try to parse the project name & file ID out of the URL path
+		parts := curseForgeRegex.FindStringSubmatch(url.Path)
+		if len(parts) < 4 {
+			// Unknown structure on the CurseForge path; bail
+			return fmt.Errorf("invalid CurseForge URL")
+		}
+
+		modSlug := parts[1]
+		fileID, _ = strconv.Atoi(parts[3])
+
+		// Lookup the modID using the slug in a URL
+		modID, err = db.findModByURL("https://minecraft.curseforge.com/projects/" + modSlug)
 		if err != nil {
 			return err
 		}
-
-		// Get the primary and secondary versions (e.g. if mcVersion is 1.12.2, we want to check first
-		// for a mod with 1.12.2 and then fallback to 1.12)
-		primaryVsn, secondaryVsn := parseVersion(cp.minecraftVersion())
-
-		// First, look for mod with primary version
-		modFile, err := db.findModFile(mod, primaryVsn)
-		if err != nil {
-			// Try again with secondary version
-			modFile, err = db.findModFile(mod, secondaryVsn)
-			if err != nil {
-				return err
-			}
-		}
-		return cp.selectModFile(modFile, clientOnly)
-
-	} else if !strings.Contains(mod, "minecraft.curseforge.com") && tag == "" {
-		return fmt.Errorf("Non-CurseForge URLs must include a tag argument")
 	} else {
-		return cp.selectModURL(mod, tag, clientOnly)
+		// Try to lookup the mod ID by name
+		modID, err = db.findModByName(mod)
+		if err != nil {
+			return err
+		}
 	}
+
+	// At this point, we should have a modID and we may have a fileID. We want to walk major.minor.[patch]
+	// versions, and find either the latest file for our version of minecraft or verify that the fileID
+	// we have will work on this version
+	major, minor, patch, err := parseVersion(cp.minecraftVersion())
+	if err != nil {
+		// Invalid version string?!
+		return err
+	}
+
+	// Walk down patch versions, looking for our mod + file (or latest file if no fileID available)
+	for i := patch; i > -1; i-- {
+		var vsn string
+		if i > 0 {
+			vsn = fmt.Sprintf("%d.%d.%d", major, minor, i)
+		} else {
+			vsn = fmt.Sprintf("%d.%d", major, minor)
+		}
+		fmt.Printf("%d %s\n", patch, vsn)
+
+		modFile, err := db.findModFile(modID, fileID, vsn)
+		if err == nil {
+			return cp.selectModFile(modFile, clientOnly)
+		}
+	}
+
+	// Didn't find a file that matches :(
+	return fmt.Errorf("No compatible file found for %s", mod)
 }
 
 func cmdModList() error {

@@ -329,6 +329,9 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 }
 
 func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
+	if name == "" {
+		return fmt.Errorf("No tag provided for %s: ", url)
+	}
 	// Insert the url by name into extfiles map
 	pack.manifest.Set(url, "extfiles", name)
 	fmt.Printf("Registered %s as %s (clientOnly=%t)\n", url, name, clientOnly)

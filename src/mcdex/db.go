@@ -180,7 +180,7 @@ func (db *Database) listMods(name, mcvsn string) error {
 		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
 	}
 
-	query := "select name, description from mods where modid in (select modid from modfiles where version = ?) order by name"
+	query := "select name, description, url from mods where modid in (select modid from modfiles where version = ?) order by name"
 	if mcvsn == "" {
 		query = "select name, description from mods order by name"
 	}
@@ -193,44 +193,18 @@ func (db *Database) listMods(name, mcvsn string) error {
 
 	// For each row, check the name against the pre-compiled regex
 	for rows.Next() {
-		var modName, modDesc string
-		err = rows.Scan(&modName, &modDesc)
+		var modName, modDesc, modUrl string
+		err = rows.Scan(&modName, &modDesc, &modUrl)
 		if err != nil {
 			return err
 		}
 
 		if nameRegex.MatchString(modName) {
-			fmt.Printf("%s - %s\n", modName, modDesc)
+			fmt.Printf("%s | %s | %s\n", modName, modDesc, modUrl)
 		}
 	}
 
 	return nil
-}
-
-func (db *Database) findModFile(name, mcvsn string) (*ModFile, error) {
-	// First, look up the modid for the given name
-	var modid int
-	var desc string
-	err := db.sqlDb.QueryRow("select modid, description from mods where name = ?", name).Scan(&modid, &desc)
-	switch {
-	case err == sql.ErrNoRows:
-		return nil, fmt.Errorf("No mod found %s", name)
-	case err != nil:
-		return nil, err
-	}
-
-	// Now find the latest release or beta version
-	var fileid int
-	err = db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
-		modid, mcvsn).Scan(&fileid)
-	switch {
-	case err == sql.ErrNoRows:
-		return nil, fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
-	case err != nil:
-		return nil, err
-	}
-
-	return &ModFile{fileID: fileid, modID: modid, modName: name, modDesc: desc}, nil
 }
 
 func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {
@@ -253,6 +227,54 @@ func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) 
 		return nil, fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
 	case err != nil:
 		return nil, err
+	}
+
+	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+}
+
+func (db *Database) findModByURL(url string) (int, error) {
+	var modID int
+	err := db.sqlDb.QueryRow("select modid from mods where url = ?", url).Scan(&modID)
+	switch {
+	case err == sql.ErrNoRows:
+		return -1, fmt.Errorf("No mod found %s", url)
+	case err != nil:
+		return -1, err
+	}
+	return modID, nil
+}
+
+func (db *Database) findModByName(name string) (int, error) {
+	var modID int
+	err := db.sqlDb.QueryRow("select modid from mods where name = ?", name).Scan(&modID)
+	switch {
+	case err == sql.ErrNoRows:
+		return -1, fmt.Errorf("No mod found %s", name)
+	case err != nil:
+		return -1, err
+	}
+	return modID, nil
+}
+
+func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, error) {
+	// Try to match the file ID
+	if fileID > 0 {
+		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and fileid = ? and version = ?", modID, fileID, mcversion).Scan(&fileID)
+		if err != nil {
+			return nil, fmt.Errorf("No matching file ID for %s version", mcversion)
+		}
+	} else {
+		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ?", modID, mcversion).Scan(&fileID)
+		if err != nil {
+			return nil, fmt.Errorf("No recent file for mod %d / %s version", modID, mcversion)
+		}
+	}
+
+	// We matched some file; pull the name and description for the mod
+	var name, desc string
+	err := db.sqlDb.QueryRow("select name, description from mods where modid = ?", modID).Scan(&name, &desc)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to retrieve name, description for mod %d: %+v", modID, err)
 	}
 
 	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil

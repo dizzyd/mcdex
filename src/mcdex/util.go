@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -190,11 +191,24 @@ func writeStringFile(filename, data string) error {
 	return ioutil.WriteFile(filename, []byte(data), 0644)
 }
 
-func parseVersion(mcVersion string) (primaryVsn, secondaryVsn string) {
-	parts := strings.SplitN(mcVersion, ".", 3)
-	if len(parts) > 2 {
-		return mcVersion, fmt.Sprintf("%s.%s", parts[0], parts[1])
+func parseVersion(version string) (int, int, int, error) {
+	parts := strings.SplitN(version, ".", 3)
+	// Walk over all the parts and convert to ints
+	intParts := make([]int, len(parts))
+	for i := 0; i < len(parts); i++ {
+		value, err := strconv.Atoi(parts[i])
+		if err != nil {
+			intParts[i] = -1
+		} else {
+			intParts[i] = value
+		}
+	}
+
+	if len(intParts) > 2 {
+		return intParts[0], intParts[1], intParts[2], nil
+	} else if len(intParts) > 1 {
+		return intParts[0], intParts[1], 0, nil
 	} else {
-		return mcVersion, ""
+		return -1, -1, -1, fmt.Errorf("invalid version %s", version)
 	}
 }
