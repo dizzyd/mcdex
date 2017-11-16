@@ -255,7 +255,7 @@ func _modSelect(clientOnly bool) error {
 
 	// Try to parse the mod as a URL
 	url, err := url.Parse(mod)
-	if err == nil {
+	if err == nil && (url.Scheme == "http" || url.Scheme == "https") {
 		// We have a URL; if it's not a CurseForge URL, treat it as an external file
 		if url.Host != "minecraft.curseforge.com" {
 			return cp.selectModURL(mod, tag, clientOnly)
