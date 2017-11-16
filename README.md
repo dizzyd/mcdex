@@ -88,3 +88,21 @@ Alternatively, if you want to only look for mods with 'Map' that work on 1.10.2,
 ```
 mcdex mod.list Map 1.10.2
 ```
+
+## Updating mods within a pack
+
+If you want to update all the mods within a pack, you can now run:
+
+```
+mcdex mod.update mypack
+```
+
+This will walk over all the installed mods within a manifest and look for more recent versions of the mod that work with your selected version of minecraft.
+It will list all the affected mods as it runs, so you can see exactly what changed. If you want to make sure a mod doesn't get updated, in the manifest.json
+you can add a "locked": true entry to that mod and mcdex will not upgrade it.
+
+Once you've updated the manifest with mod.update.all, you need to re-install the pack to make sure the new mods are updated:
+
+```
+mcdex pack.install mypack
+```
