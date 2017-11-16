@@ -301,7 +301,6 @@ func _modSelect(clientOnly bool) error {
 		} else {
 			vsn = fmt.Sprintf("%d.%d", major, minor)
 		}
-		fmt.Printf("%d %s\n", patch, vsn)
 
 		modFile, err := db.findModFile(modID, fileID, vsn)
 		if err == nil {
