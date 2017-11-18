@@ -182,7 +182,7 @@ func (db *Database) listMods(name, mcvsn string) error {
 
 	query := "select name, description, url from mods where modid in (select modid from modfiles where version = ?) order by name"
 	if mcvsn == "" {
-		query = "select name, description from mods order by name"
+		query = "select name, description, url from mods order by name"
 	}
 
 	rows, err := db.sqlDb.Query(query, mcvsn)
