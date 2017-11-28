@@ -264,7 +264,8 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 			return nil, fmt.Errorf("No matching file ID for %s version", mcversion)
 		}
 	} else {
-		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ?", modID, mcversion).Scan(&fileID)
+		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+			modID, mcversion).Scan(&fileID)
 		if err != nil {
 			return nil, fmt.Errorf("No recent file for mod %d / %s version", modID, mcversion)
 		}
