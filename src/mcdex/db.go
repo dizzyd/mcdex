@@ -112,9 +112,6 @@ func InstallDatabase() error {
 	if err != nil {
 		return fmt.Errorf("Failed to rename mcdex.dat.tmp: %+v", err)
 	}
-
-	fmt.Printf("Updated mod database.\n")
-
 	return nil
 }
 
@@ -205,6 +202,12 @@ func (db *Database) listMods(name, mcvsn string) error {
 	}
 
 	return nil
+}
+
+func (db *Database) getLatestFileTstamp() (int, error) {
+	var tstamp int
+	err := db.sqlDb.QueryRow("select tstamp from modfiles order by tstamp desc limit 1").Scan(&tstamp)
+	return tstamp, err
 }
 
 func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {

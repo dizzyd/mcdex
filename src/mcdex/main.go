@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"time"
 )
 
 var version string
@@ -388,7 +389,24 @@ func cmdServerInstall() error {
 }
 
 func cmdDBUpdate() error {
-	return InstallDatabase()
+	err := InstallDatabase()
+	if err != nil {
+		return err
+	}
+
+	// Display last updated file in database (simple way to know how recent a file we have)
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	tstamp, err := db.getLatestFileTstamp()
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Database up-to-date as of %s\n", time.Unix(int64(tstamp), 0))
+	return nil
 }
 
 func console(f string, args ...interface{}) {
