@@ -414,7 +414,9 @@ func console(f string, args ...interface{}) {
 
 func usage() {
 	console("usage: mcdex [<options>] <command> [<args>]\n")
-	console(" commands:\n")
+	console("<options>\n")
+	flag.PrintDefaults()
+	console("\n<commands>\n")
 
 	// Sort the list of keys in gCommands
 	keys := []string{}
@@ -423,7 +425,7 @@ func usage() {
 	}
 	sort.Strings(keys)
 	for _, cmd := range keys {
-		console(" - %s: %s\n", cmd, gCommands[cmd].Desc)
+		console("  - %s: %s\n", cmd, gCommands[cmd].Desc)
 	}
 }
 
