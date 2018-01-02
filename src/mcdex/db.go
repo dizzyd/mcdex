@@ -172,7 +172,7 @@ func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
 
 func (db *Database) listMods(name, mcvsn string) error {
 	// Turn the name into a pre-compiled regex
-	nameRegex, err := regexp.Compile(name)
+	nameRegex, err := regexp.Compile("(?i)" + name)
 	if err != nil {
 		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
 	}
