@@ -172,7 +172,7 @@ func (pack *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	pack.manifest.SetP(name, "name")
 
 	loader := make(map[string]interface{})
-	loader["id"] = forgeVsn
+	loader["id"] = "forge-" + forgeVsn
 	loader["primary"] = true
 
 	pack.manifest.ArrayOfSizeP(1, "minecraft.modLoaders")
