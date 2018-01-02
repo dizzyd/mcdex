@@ -34,6 +34,7 @@ var version string
 var ARG_MMC bool
 var ARG_VERBOSE bool
 var ARG_SKIPMODS bool
+var ARG_IGNORE_FAILED_DOWNLOADS bool
 
 type command struct {
 	Fn        func() error
@@ -194,7 +195,7 @@ func cmdPackInstall() error {
 
 	if ARG_SKIPMODS == false {
 		// Install mods (include client-side only mods)
-		err = cp.installMods(true)
+		err = cp.installMods(true, ARG_IGNORE_FAILED_DOWNLOADS)
 		if err != nil {
 			return err
 		}
@@ -378,14 +379,12 @@ func cmdServerInstall() error {
 	}
 
 	// Make sure all mods are installed (do NOT include client-side only)
-	err = cp.installMods(false)
+	err = cp.installMods(false, ARG_IGNORE_FAILED_DOWNLOADS)
 	if err != nil {
 		return err
 	}
 
 	return nil
-	// Setup the command-line
-	// java -jar <forge.jar>
 }
 
 func cmdDBUpdate() error {
@@ -433,6 +432,7 @@ func main() {
 	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
+	flag.BoolVar(&ARG_IGNORE_FAILED_DOWNLOADS, "ignore", false, "Ignore failed mod downloads when installing a pack")
 
 	// Process command-line args
 	flag.Parse()

@@ -229,7 +229,7 @@ func (pack *ModPack) createLauncherProfile() error {
 	return nil
 }
 
-func (pack *ModPack) installMods(isClient bool) error {
+func (pack *ModPack) installMods(isClient bool, ignoreFailedDownloads bool) error {
 	// Make sure mods directory already exists
 	os.MkdirAll(pack.modPath, 0700)
 
@@ -257,7 +257,11 @@ func (pack *ModPack) installMods(isClient bool) error {
 		fileID := int(f.Path("fileID").Data().(float64))
 		filename, err := pack.installMod(projectID, fileID)
 		if err != nil {
-			return err
+			if ignoreFailedDownloads {
+				fmt.Printf("Ignoring failed download: %+v\n", err)
+			} else {
+				return err
+			}
 		}
 
 		f.Set(filename, "filename")
@@ -273,7 +277,11 @@ func (pack *ModPack) installMods(isClient bool) error {
 	for _, url := range extFiles {
 		_, err := pack.installModURL(url.Data().(string))
 		if err != nil {
-			return err
+			if ignoreFailedDownloads {
+				fmt.Printf("Ignoring failed download: %+v\n", err)
+			} else {
+				return err
+			}
 		}
 	}
 
