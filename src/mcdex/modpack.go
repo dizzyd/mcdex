@@ -470,6 +470,7 @@ func (pack *ModPack) installOverrides() error {
 		}
 
 		filename := filepath.Join(pack.gamePath, strings.Replace(f.Name, "overrides/", "", -1))
+		filename = stripBadUTF8(filename)
 
 		// Make sure the directory for the file exists
 		os.MkdirAll(filepath.Dir(filename), 0700)

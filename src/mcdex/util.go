@@ -30,6 +30,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"net/url"
 
@@ -211,4 +212,24 @@ func parseVersion(version string) (int, int, int, error) {
 	} else {
 		return -1, -1, -1, fmt.Errorf("invalid version %s", version)
 	}
+}
+
+func stripBadUTF8(s string) string {
+	// Noop if we've already got a valid string
+	if utf8.ValidString(s) {
+		return s
+	}
+
+	// Walk the string, checking each rune
+	v := make([]rune, 0, len(s))
+	for i, r := range s {
+		if r == utf8.RuneError {
+			_, size := utf8.DecodeRuneInString(s[i:])
+			if size == 1 {
+				continue
+			}
+		}
+		v = append(v, r)
+	}
+	return string(v)
 }
