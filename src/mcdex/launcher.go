@@ -53,13 +53,16 @@ func newLauncherConfig() (*launcherConfig, error) {
 	return lc, nil
 }
 
-func (lc *launcherConfig) createProfile(name, version, gameDir string) error {
+func (lc *launcherConfig) createProfile(name, version, gameDir, javaArgs string) error {
 	if !nameRegex.MatchString(name) {
 		return fmt.Errorf("invalid profile name: %s", name)
 	}
 	lc.data.Set(name, "profiles", name, "name")
 	lc.data.Set(version, "profiles", name, "lastVersionId")
 	lc.data.Set(gameDir, "profiles", name, "gameDir")
+	if javaArgs != "" {
+		lc.data.Set(javaArgs, "profiles", name, "javaArgs")
+	}
 	return nil
 }
 

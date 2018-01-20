@@ -208,6 +208,12 @@ func (pack *ModPack) createLauncherProfile() error {
 		return fmt.Errorf("failed to install Forge %s: %+v", forgeVsn, err)
 	}
 
+	// Check the manifest for any Java arguments
+	javaArgs := ""
+	if pack.manifest.ExistsP("minecraft.javaArgs") {
+		javaArgs = pack.manifest.Path("minecraft.javaArgs").Data().(string)
+	}
+
 	// Finally, load the launcher_profiles.json and make a new entry
 	// with appropriate name and reference to our pack directory and forge version
 	lc, err := newLauncherConfig()
@@ -216,7 +222,7 @@ func (pack *ModPack) createLauncherProfile() error {
 	}
 
 	fmt.Printf("Creating profile: %s\n", pack.name)
-	err = lc.createProfile(pack.name, forgeID, pack.gamePath)
+	err = lc.createProfile(pack.name, forgeID, pack.gamePath, javaArgs)
 	if err != nil {
 		return fmt.Errorf("failed to create profile: %+v", err)
 	}
