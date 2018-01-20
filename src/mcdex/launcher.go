@@ -57,10 +57,9 @@ func (lc *launcherConfig) createProfile(name, version, gameDir string) error {
 	if !nameRegex.MatchString(name) {
 		return fmt.Errorf("invalid profile name: %s", name)
 	}
-	path := "profiles." + name
-	lc.data.SetP(name, path+".name")
-	lc.data.SetP(version, path+".lastVersionId")
-	lc.data.SetP(gameDir, path+".gameDir")
+	lc.data.Set(name, "profiles", name, "name")
+	lc.data.Set(version, "profiles", name, "lastVersionId")
+	lc.data.Set(gameDir, "profiles", name, "gameDir")
 	return nil
 }
 
