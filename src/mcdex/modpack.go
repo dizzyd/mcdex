@@ -352,7 +352,7 @@ func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
 	return pack.saveManifest()
 }
 
-func (pack *ModPack) updateMods(db *Database) error {
+func (pack *ModPack) updateMods(db *Database, dryRun bool) error {
 	// Walk over each file, looking for a more recent file ID for the
 	// appropriate version
 	files, _ := pack.manifest.S("files").Children()
@@ -365,6 +365,12 @@ func (pack *ModPack) updateMods(db *Database) error {
 			// Skip locked mods that have an update available
 			if isLocked {
 				fmt.Printf("Skipping %s (locked)\n", latestFile.modName)
+				continue
+			}
+
+			// If this is a dry run, don't make any actual changes
+			if dryRun {
+				fmt.Printf("Update available for %s: %d -> %d\n", latestFile.modName, fileID, latestFile.fileID)
 				continue
 			}
 
@@ -384,7 +390,10 @@ func (pack *ModPack) updateMods(db *Database) error {
 		}
 	}
 
-	return pack.saveManifest()
+	if !dryRun {
+		return pack.saveManifest()
+	}
+	return nil
 }
 
 func (pack *ModPack) saveManifest() error {

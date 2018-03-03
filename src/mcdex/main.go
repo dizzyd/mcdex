@@ -37,6 +37,7 @@ var ARG_MMC bool
 var ARG_VERBOSE bool
 var ARG_SKIPMODS bool
 var ARG_IGNORE_FAILED_DOWNLOADS bool
+var ARG_DRY_RUN bool
 
 type command struct {
 	Fn        func() error
@@ -341,7 +342,7 @@ func cmdModUpdateAll() error {
 		return err
 	}
 
-	err = cp.updateMods(db)
+	err = cp.updateMods(db, ARG_DRY_RUN)
 	if err != nil {
 		return err
 	}
@@ -440,6 +441,7 @@ func main() {
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
 	flag.BoolVar(&ARG_IGNORE_FAILED_DOWNLOADS, "ignore", false, "Ignore failed mod downloads when installing a pack")
+	flag.BoolVar(&ARG_DRY_RUN, "n", false, "Dry run; don't save any changes to manifest")
 
 	// Process command-line args
 	flag.Parse()
