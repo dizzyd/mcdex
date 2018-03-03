@@ -75,6 +75,12 @@
 			"revisionTime": "2013-07-20T02:35:26Z"
 		},
 		{
+			"checksumSHA1": "ikom5T8qOMPaOsl8gfeeGXeOKCE=",
+			"path": "github.com/xeonx/timeago",
+			"revision": "714e6695c468c22fb6431a914d8c5f9d19fa2367",
+			"revisionTime": "2017-07-07T12:34:13Z"
+		},
+		{
 			"checksumSHA1": "gR0a3qT+aWFzkvf244v/doaFzFs=",
 			"path": "github.com/xi2/xz",
 			"revision": "19aeb13c4e7cb6bd3188dfede73840f33455425a",

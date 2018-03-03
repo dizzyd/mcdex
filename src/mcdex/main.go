@@ -27,6 +27,8 @@ import (
 	"sort"
 	"strconv"
 	"time"
+
+	"github.com/xeonx/timeago"
 )
 
 var version string
@@ -404,7 +406,10 @@ func cmdDBUpdate() error {
 		return err
 	}
 
-	fmt.Printf("Database up-to-date as of %s\n", time.Unix(int64(tstamp), 0))
+	elapsed := time.Unix(int64(tstamp), 0)
+	elapsedFriendly := timeago.English.Format(elapsed)
+
+	fmt.Printf("Database up-to-date as of %s (%s)\n", elapsedFriendly, elapsed)
 	return nil
 }
 
