@@ -315,7 +315,7 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 	existingIndex := -1
 	files, _ := pack.manifest.S("files").Children()
 	for i, child := range files {
-		childProjectID := int(child.S("projectID").Data().(float64))
+		childProjectID, _ := intValue(child, "projectID")
 		if childProjectID == modFile.modID {
 			// Found a matching project ID; note the index so we can replace it
 			existingIndex = i
@@ -358,8 +358,8 @@ func (pack *ModPack) updateMods(db *Database, dryRun bool) error {
 	files, _ := pack.manifest.S("files").Children()
 	for _, child := range files {
 		isLocked := child.Exists("locked") && child.S("locked").Data().(bool)
-		modID := int(child.S("projectID").Data().(float64))
-		fileID := int(child.S("fileID").Data().(float64))
+		modID, _ := intValue(child, "projectID")
+		fileID, _ := intValue(child, "fileID")
 		latestFile, err := db.getLatestModFile(modID, pack.minecraftVersion())
 		if err == nil && latestFile.fileID > fileID {
 			// Skip locked mods that have an update available
@@ -442,6 +442,12 @@ func (pack *ModPack) installModURL(url string) (string, error) {
 
 	// Extract the filename from the actual request (after following all redirects)
 	filename := filepath.Base(resp.Request.URL.Path)
+
+	// Check for Content-Disposition header
+	attachmentID := resp.Header.Get("Content-Disposition")
+	if strings.HasPrefix(attachmentID, "attachment; filename=") {
+		filename = strings.TrimPrefix(attachmentID, "attachment; filename=")
+	}
 
 	// Cleanup the filename
 	filename = strings.Replace(filename, " r", "-", -1)
