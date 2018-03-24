@@ -170,6 +170,18 @@ func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
 	return forgeVsn, nil
 }
 
+func (db *Database) lookupMcVsn(forgeVsn string) (string, error) {
+	var mcVsn string
+	err := db.sqlDb.QueryRow("select mcvsn from forge where version = ?", forgeVsn).Scan(&mcVsn)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No Minecraft version found for %s", mcVsn)
+	case err != nil:
+		return "", err
+	}
+	return mcVsn, nil
+}
+
 func (db *Database) listMods(name, mcvsn string) error {
 	// Turn the name into a pre-compiled regex
 	nameRegex, err := regexp.Compile("(?i)" + name)

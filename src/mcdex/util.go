@@ -233,3 +233,30 @@ func stripBadUTF8(s string) string {
 	}
 	return string(v)
 }
+
+func getJSONFromURL(url string) (*gabs.Container, error) {
+	res, e := HttpGet(url)
+	if e != nil {
+		return nil, fmt.Errorf("Failed to complete HTTP request: %s %+v", url, e)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return nil, fmt.Errorf("Failed to retrieve %s: %d", url, res.StatusCode)
+	}
+
+	// Parse the data using gabs
+	return gabs.ParseJSONBuffer(res.Body)
+}
+
+func intValue(c *gabs.Container, path string) (int, error) {
+	data := c.Path(path).Data()
+	switch v := data.(type) {
+	case int:
+		return v, nil
+	case float64:
+		return int(v), nil
+	default:
+		return 0, fmt.Errorf("Invalid type for %s: %+v", path, data)
+	}
+}

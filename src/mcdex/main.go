@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xeonx/timeago"
@@ -104,6 +105,12 @@ var gCommands = map[string]command{
 		Desc:      "List available versions of Forge",
 		ArgsCount: 1,
 		Args:      "<minecraft version>",
+	},
+	"openeye.to.manifest": command{
+		Fn:        cmdOpenEyeToManifest,
+		Desc:      "Convert an OpenEye crash dump into a manifest.json",
+		ArgsCount: 1,
+		Args:      "<OpenEye Crash URL>",
 	},
 }
 
@@ -412,6 +419,74 @@ func cmdDBUpdate() error {
 
 	fmt.Printf("Database up-to-date as of %s (%s)\n", elapsedFriendly, elapsed)
 	return nil
+}
+
+func cmdOpenEyeToManifest() error {
+	url := flag.Arg(1)
+
+	if !strings.Contains(url, "/browse/raw/crashes") {
+		return fmt.Errorf("Please provide the raw crash data URL")
+	}
+
+	crashData, err := getJSONFromURL(url)
+	if err != nil {
+		return err
+	}
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	modPack, err := NewModPack(".", false, false)
+	if err != nil {
+		return err
+	}
+
+	// Lookup the minecraft version that corresponds with this version of Forge
+	forgeVsn := crashData.Path("forge").Index(0).Data().(string)
+	mcVsn, err := db.lookupMcVsn(forgeVsn)
+	if err != nil {
+		return err
+	}
+
+	err = modPack.createManifest("CrashGen", mcVsn, forgeVsn)
+	if err != nil {
+		return err
+	}
+
+	modPack.manifest.Set(url, "url")
+	modPack.manifest.Array("skipped")
+
+	// Retrieve all the individual file descriptors
+	sigs, _ := crashData.Path("allSignatures").Children()
+	for _, sig := range sigs {
+		fileData, err := getJSONFromURL(fmt.Sprintf("https://openeye.openmods.info/browse/raw/files/%s", sig.Data().(string)))
+		if err != nil {
+			fmt.Printf("Error retrieving %s: %+s\n", sig, err)
+			continue
+		}
+
+		// Get the mod name (if available) and use that to find a mod in the database
+		modNames, _ := fileData.Path("mods.name").Children()
+		for _, nameData := range modNames {
+			name := nameData.Data().(string)
+			modID, _ := db.findModByName(name)
+			if modID > 0 {
+				f, err := db.getLatestModFile(modID, mcVsn)
+				if err != nil {
+					modPack.manifest.ArrayAppend(name, "skipped")
+					continue
+				}
+				modPack.selectModFile(f, false)
+			} else {
+				modPack.manifest.ArrayAppend(name, "skipped")
+				fmt.Printf("Skipping unknown mod: %s\n", name)
+			}
+		}
+	}
+
+	return modPack.saveManifest()
 }
 
 func console(f string, args ...interface{}) {
