@@ -25,9 +25,11 @@ _testmain.go
 
 # Govendor cache
 .cache
-src/mcdex-*
 bin
 pkg
 
 src/golang.org
 src/github.com
+
+mcdex
+mcdex.latest
