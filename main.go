@@ -216,7 +216,7 @@ func cmdPackInstall() error {
 
 func cmdInfo() error {
 	// Try to retrieve the latest available version info
-	publishedVsn, err := getLatestVersion("release")
+	publishedVsn, err := getLatestVersion("releases")
 
 	if err != nil && ARG_VERBOSE {
 		fmt.Printf("%s\n", err)
