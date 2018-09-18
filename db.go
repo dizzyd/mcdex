@@ -21,11 +21,13 @@ import (
 	"compress/bzip2"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
 	"regexp"
+
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -56,27 +58,18 @@ func OpenDatabase() (*Database, error) {
 
 	db.sqlDb = sqlDb
 
-	vsn, err := db.getMeta("version")
-	if vsn != "" {
-		db.version = vsn
-	} else {
-		// Assume version 1; log error for posterity
-		db.version = "1"
-		log.Printf("Reading version error: %+v\n", err)
-	}
-
 	return db, nil
 }
 
 func InstallDatabase() error {
 	// Get the latest version
-	version, err := getLatestVersion("data")
+	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v3")
 	if err != nil {
 		return err
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
-	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v2-%s.dat.bz2", version)
+	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v3-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
@@ -113,18 +106,6 @@ func InstallDatabase() error {
 		return fmt.Errorf("Failed to rename mcdex.dat.tmp: %+v", err)
 	}
 	return nil
-}
-
-func (db *Database) getMeta(key string) (string, error) {
-	var value string
-	err := db.sqlDb.QueryRow("select value from meta where key = ?", key).Scan(&value)
-	switch {
-	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No %s found in meta table", key)
-	case err != nil:
-		return "", err
-	}
-	return value, nil
 }
 
 func (db *Database) listForge(mcvsn string, verbose bool) error {
@@ -182,16 +163,16 @@ func (db *Database) lookupMcVsn(forgeVsn string) (string, error) {
 	return mcVsn, nil
 }
 
-func (db *Database) listMods(name, mcvsn string) error {
+func (db *Database) listMods(slug, mcvsn string) error {
 	// Turn the name into a pre-compiled regex
-	nameRegex, err := regexp.Compile("(?i)" + name)
+	slugRegex, err := regexp.Compile("(?i)" + slug)
 	if err != nil {
-		return fmt.Errorf("Failed to convert %s into regex: %s", name, err)
+		return fmt.Errorf("Failed to convert %s into regex: %s", slug, err)
 	}
 
-	query := "select name, description, url from mods where modid in (select modid from modfiles where version = ?) order by name"
+	query := "select slug, description, downloads from mods where modid in (select modid from modfiles where version = ?) order by slug"
 	if mcvsn == "" {
-		query = "select name, description, url from mods order by name"
+		query = "select slug, description, downloads from mods order by slug"
 	}
 
 	rows, err := db.sqlDb.Query(query, mcvsn)
@@ -202,14 +183,16 @@ func (db *Database) listMods(name, mcvsn string) error {
 
 	// For each row, check the name against the pre-compiled regex
 	for rows.Next() {
-		var modName, modDesc, modUrl string
-		err = rows.Scan(&modName, &modDesc, &modUrl)
+		var modSlug, modDesc string
+		var modDownloads int
+		err = rows.Scan(&modSlug, &modDesc, &modDownloads)
 		if err != nil {
 			return err
 		}
 
-		if nameRegex.MatchString(modName) {
-			fmt.Printf("%s | %s | %s\n", modName, modDesc, modUrl)
+		if slug == "" || slugRegex.MatchString(modSlug) {
+			msg := message.NewPrinter(language.English)
+			msg.Printf("%s | %s | %d downloads\n", modSlug, modDesc, modDownloads)
 		}
 	}
 
@@ -218,7 +201,7 @@ func (db *Database) listMods(name, mcvsn string) error {
 
 func (db *Database) getLatestFileTstamp() (int, error) {
 	var tstamp int
-	err := db.sqlDb.QueryRow("select tstamp from modfiles order by tstamp desc limit 1").Scan(&tstamp)
+	err := db.sqlDb.QueryRow("select value from meta where key = 'dbtunix'").Scan(&tstamp)
 	return tstamp, err
 }
 
@@ -247,12 +230,12 @@ func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) 
 	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
 }
 
-func (db *Database) findModByURL(url string) (int, error) {
+func (db *Database) findModBySlug(slug string) (int, error) {
 	var modID int
-	err := db.sqlDb.QueryRow("select modid from mods where url = ?", url).Scan(&modID)
+	err := db.sqlDb.QueryRow("select modid from mods where slug = ?", slug).Scan(&modID)
 	switch {
 	case err == sql.ErrNoRows:
-		return -1, fmt.Errorf("No mod found %s", url)
+		return -1, fmt.Errorf("No mod found %s", slug)
 	case err != nil:
 		return -1, err
 	}
@@ -261,7 +244,7 @@ func (db *Database) findModByURL(url string) (int, error) {
 
 func (db *Database) findModByName(name string) (int, error) {
 	var modID int
-	err := db.sqlDb.QueryRow("select modid from mods where name = ?", name).Scan(&modID)
+	err := db.sqlDb.QueryRow("select modid from mods where name = ? or slug = ?", name, name).Scan(&modID)
 	switch {
 	case err == sql.ErrNoRows:
 		return -1, fmt.Errorf("No mod found %s", name)
@@ -288,10 +271,35 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 
 	// We matched some file; pull the name and description for the mod
 	var name, desc string
-	err := db.sqlDb.QueryRow("select name, description from mods where modid = ?", modID).Scan(&name, &desc)
+	err := db.sqlDb.QueryRow("select slug, description from mods where modid = ?", modID).Scan(&name, &desc)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve name, description for mod %d: %+v", modID, err)
 	}
 
 	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+}
+
+func (db *Database) getDeps(fileID int) ([]int, error) {
+	var result []int
+	rows, err := db.sqlDb.Query("SELECT depid, level FROM moddeps WHERE fileid = ? and level != 3", fileID)
+
+	switch {
+	case err == sql.ErrNoRows:
+		return []int{}, nil
+	case err != nil:
+		return []int{}, fmt.Errorf("Failed to query deps for %d: %+v", fileID, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var modID, level int
+		err = rows.Scan(&modID, &level)
+		if err != nil {
+			return []int{}, fmt.Errorf("Failed to query dep rows for %d: %+v", fileID, err)
+		}
+
+		result = append(result, modID)
+	}
+
+	return result, nil
 }

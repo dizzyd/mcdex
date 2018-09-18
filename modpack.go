@@ -339,7 +339,7 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 	}
 
 	fmt.Printf("Registered %s (clientOnly=%t)\n", modFile.modName, clientOnly)
-	return pack.saveManifest()
+	return nil
 }
 
 func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
