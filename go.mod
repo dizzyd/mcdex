@@ -10,5 +10,6 @@ require (
 	github.com/xeonx/timeago v1.0.0-rc3
 	github.com/xi2/xz v0.0.0-20160429180352-19aeb13c4e7c
 	golang.org/x/net v0.0.0-20170421174939-0b588ed7a0cd
+	golang.org/x/text v0.3.0
 	gopkg.in/sourcemap.v1 v1.0.5
 )
