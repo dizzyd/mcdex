@@ -157,15 +157,15 @@ func dirExists(dirname string) bool {
 	return err == nil && stat.IsDir()
 }
 
-func getLatestVersion(vsnType string) (string, error) {
-	res, e := HttpGet(fmt.Sprintf("http://files.mcdex.net/%s/latest", vsnType))
-	if e != nil {
-		return "", fmt.Errorf("Failed to retrieve latest %s version: %+v", vsnType, e)
+func readStringFromUrl(url string) (string, error) {
+	res, err := HttpGet(url)
+	if err != nil {
+		return "", fmt.Errorf("Failed to read string from %s: %+v", url, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != 200 {
-		return "", fmt.Errorf("Failed to retrieve latest %s version: %d", vsnType, res.StatusCode)
+		return "", fmt.Errorf("Failed to read string from %s: HTTP %d", url, res.StatusCode)
 	}
 
 	// Dump the body into a string
