@@ -281,7 +281,7 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 
 func (db *Database) getDeps(fileID int) ([]int, error) {
 	var result []int
-	rows, err := db.sqlDb.Query("SELECT depid, level FROM moddeps WHERE fileid = ? and level != 3", fileID)
+	rows, err := db.sqlDb.Query("SELECT depid, level FROM moddeps WHERE fileid = ? and level == 1", fileID)
 
 	switch {
 	case err == sql.ErrNoRows:
