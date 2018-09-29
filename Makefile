@@ -4,7 +4,7 @@ APPS := mcdex
 VSN := $(shell git describe --long)
 GOVSNFLAG := -ldflags "-X main.version=$(VSN)"
 
-DOCKER_ARGS := -v $(shell pwd)/bin/docker:/mcdex/bin -w /mcdex mcdex
+DOCKER_ARGS := -v $(shell pwd)/builds:/builds -w /mcdex mcdex
 
 all:
 	go build $(GOVSNFLAG) $(APPS)
@@ -17,16 +17,19 @@ clean:
 publish: clean all docker
 	aws --profile mcdex s3 cp mcdex.latest s3://files.mcdex.net/releases/latest
 	aws --profile mcdex s3 cp mcdex s3://files.mcdex.net/releases/osx/mcdex
-	aws --profile mcdex s3 cp bin/docker/mcdex s3://files.mcdex.net/releases/linux/mcdex
-	aws --profile mcdex s3 cp bin/docker/mcdex.exe s3://files.mcdex.net/releases/win32/mcdex.exe
+	aws --profile mcdex s3 cp builds/mcdex s3://files.mcdex.net/releases/linux/mcdex
+	aws --profile mcdex s3 cp builds/mcdex.exe s3://files.mcdex.net/releases/win32/mcdex.exe
 
 windows:
 	$(shell cat windows.env) go build $(GOVSNFLAG) -x -v $(APPS)
-	mv mcdex.exe bin
+	mv mcdex.exe /builds
 
 linux:
 	$(shell cat linux.env) go build $(GOVSNFLAG) -x -v $(APPS)
-	mv mcdex bin
+	mv mcdex /builds
+
+shell: docker.init
+	docker run -ti $(DOCKER_ARGS) /bin/sh
 
 docker: docker.windows docker.linux
 
