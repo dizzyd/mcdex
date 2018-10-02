@@ -199,6 +199,28 @@ func (db *Database) listMods(slug, mcvsn string) error {
 	return nil
 }
 
+func (db *Database) listLatestMods(mcvsn string) error {
+	rows, err := db.sqlDb.Query("select slug, description, downloads from mods where modid in (select modid from modfiles order by tstamp desc) limit 100")
+	if err != nil {
+		return fmt.Errorf("Query failed: %+v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var modSlug, modDesc string
+		var modDownloads int
+
+		err = rows.Scan(&modSlug, &modDesc, &modDownloads)
+		if err != nil {
+			return err
+		}
+
+		msg := message.NewPrinter(language.English)
+		msg.Printf("%s | %s | %d downloads\n", modSlug, modDesc, modDownloads)
+	}
+	return nil
+}
+
 func (db *Database) getLatestFileTstamp() (int, error) {
 	var tstamp int
 	err := db.sqlDb.QueryRow("select value from meta where key = 'dbtunix'").Scan(&tstamp)

@@ -71,6 +71,13 @@ var gCommands = map[string]command{
 		ArgsCount: 0,
 		Args:      "[<mod name> <minecraft version>]",
 	},
+	"mod.list.latest": command{
+		Fn:        cmdModListLatest,
+		Desc:      "List most recently updated mods",
+		ArgsCount: 0,
+		Args:      "[<minecraft version>]",
+	},
+
 	"mod.select": command{
 		Fn:        cmdModSelect,
 		Desc:      "Select a mod to include in the specified pack",
@@ -356,6 +363,17 @@ func cmdModList() error {
 	}
 
 	return db.listMods(name, mcvsn)
+}
+
+func cmdModListLatest() error {
+	mcvsn := flag.Arg(1)
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	return db.listLatestMods(mcvsn)
 }
 
 func cmdModUpdateAll() error {
