@@ -170,6 +170,7 @@ func (pack *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	pack.manifest.SetP("minecraftModpack", "manifestType")
 	pack.manifest.SetP(1, "manifestVersion")
 	pack.manifest.SetP(name, "name")
+	pack.manifest.SetP("0.0.1", "version")
 
 	loader := make(map[string]interface{})
 	loader["id"] = "forge-" + forgeVsn
@@ -556,35 +557,39 @@ func (pack *ModPack) installServer() error {
 }
 
 const MMC_CONFIG = `InstanceType=OneSix
-IntendedVersion=%s
-ForgeVersion=%s
-LogPrePostOutput=true
-OverrideCommands=false
-OverrideConsole=false
-OverrideJavaArgs=false
-OverrideJavaLocation=false
-OverrideMemory=false
-OverrideWindow=false
-iconKey=default
-lastLaunchTime=0
+iconKey=flame
 name=%s - %s
-totalTimePlayed=0`
+`
 
 func (pack *ModPack) generateMMCConfig() error {
 	name := pack.manifest.S("name").Data().(string)
 	version := pack.manifest.S("version").Data().(string)
 
-	// Generate the instance config string
-	minecraftVsn, forgeVsn := pack.getVersions()
-	cfg := fmt.Sprintf(MMC_CONFIG, minecraftVsn, forgeVsn, name, version)
-
 	fmt.Printf("Generating instance.cfg for MultiMC\n")
+	cfg := fmt.Sprintf(MMC_CONFIG, name, version)
 
 	// Write it out
-	err := ioutil.WriteFile(filepath.Join(pack.rootPath, "instance.cfg"), []byte(cfg), 0644)
-	if err != nil {
+	if err := ioutil.WriteFile(filepath.Join(pack.rootPath, "instance.cfg"), []byte(cfg), 0644); err != nil {
 		return fmt.Errorf("failed to save instance.cfg: %+v", err)
 	}
 
+	minecraftVsn, forgeVsn := pack.getVersions()
+	fmt.Printf("Generating mmc-pack.json for MultiMC\n")
+	mmcpack := gabs.New()
+	_, _ = mmcpack.Array("components")
+	_ = mmcpack.ArrayAppend(map[string]interface{}{
+		"important": true,
+		"uid":       "net.minecraft",
+		"version":   minecraftVsn,
+	}, "components")
+	_ = mmcpack.ArrayAppend(map[string]interface{}{
+		"uid":     "net.minecraftforge",
+		"version": forgeVsn,
+	}, "components")
+	_, _ = mmcpack.Set(1, "formatVersion")
+
+	if err := writeJSON(mmcpack, filepath.Join(pack.rootPath, "mmc-pack.json")); err != nil {
+		return fmt.Errorf("failed to save mmc-pack.json: %+v", err)
+	}
 	return nil
 }

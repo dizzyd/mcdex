@@ -147,15 +147,24 @@ func cmdPackCreate() error {
 	}
 
 	// Create the manifest for this new pack
-	err = cp.createManifest(dir, minecraftVsn, forgeVsn)
+	err = cp.createManifest(cp.name, minecraftVsn, forgeVsn)
 	if err != nil {
 		return err
 	}
 
-	// Create the launcher profile (and install forge if necessary)
-	err = cp.createLauncherProfile()
-	if err != nil {
-		return err
+	// If the -mmc flag is provided, don't create a launcher profile; just generate
+	// an instance.cfg for MultiMC to use
+	if ARG_MMC {
+		err = cp.generateMMCConfig()
+		if err != nil {
+			return err
+		}
+	} else {
+		// Create launcher profile
+		err = cp.createLauncherProfile()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
