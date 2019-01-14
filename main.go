@@ -23,6 +23,8 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -52,13 +54,13 @@ var gCommands = map[string]command{
 		Fn:        cmdPackCreate,
 		Desc:      "Create a new mod pack",
 		ArgsCount: 2,
-		Args:      "<directory> <minecraft version> [<forge version>]",
+		Args:      "<directory/name> <minecraft version> [<forge version>]",
 	},
 	"pack.install": command{
 		Fn:        cmdPackInstall,
-		Desc:      "Install a mod pack, optionally using a URL to download",
+		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", NamePlaceholder),
 		ArgsCount: 1,
-		Args:      "<directory> [<url>]",
+		Args:      "<directory/name> [<url>]",
 	},
 	"info": command{
 		Fn:        cmdInfo,
@@ -82,25 +84,25 @@ var gCommands = map[string]command{
 		Fn:        cmdModSelect,
 		Desc:      "Select a mod to include in the specified pack",
 		ArgsCount: 2,
-		Args:      "<directory> <mod name or URL> [<tag>]",
+		Args:      "<directory/name> <mod name or URL> [<tag>]",
 	},
 	"mod.select.client": command{
 		Fn:        cmdModSelectClient,
 		Desc:      "Select a client-side only mod to include in the specified pack",
 		ArgsCount: 2,
-		Args:      "<directory> <mod name or URL> [<tag>]",
+		Args:      "<directory/name> <mod name or URL> [<tag>]",
 	},
 	"mod.update.all": command{
 		Fn:        cmdModUpdateAll,
 		Desc:      "Update all mods entries to latest available file",
 		ArgsCount: 1,
-		Args:      "<directory>",
+		Args:      "<directory/name>",
 	},
 	"server.install": command{
 		Fn:        cmdServerInstall,
 		Desc:      "Install a Minecraft server using an existing pack",
 		ArgsCount: 1,
-		Args:      "<directory>",
+		Args:      "<directory/name>",
 	},
 	"db.update": command{
 		Fn:        cmdDBUpdate,
@@ -125,6 +127,10 @@ func cmdPackCreate() error {
 	dir := flag.Arg(1)
 	minecraftVsn := flag.Arg(2)
 	forgeVsn := flag.Arg(3)
+
+	if dir == NamePlaceholder {
+		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", NamePlaceholder)
+	}
 
 	// If no forge version was specified, open the database and find
 	// a recommended one
@@ -247,6 +253,7 @@ func cmdInfo() error {
 	// Print the environment
 	fmt.Printf("Environment:\n")
 	fmt.Printf("* Minecraft dir: %s\n", env().MinecraftDir)
+	fmt.Printf("* MultiMC dir: %s\n", env().MultiMCDir)
 	fmt.Printf("* mcdex dir: %s\n", env().McdexDir)
 	fmt.Printf("* Java dir: %s\n", env().JavaDir)
 	return nil
@@ -559,9 +566,38 @@ func usage() {
 	}
 }
 
+type StrValue struct {
+	isSet bool
+	value string
+}
+
+func (v *StrValue) String() string {
+	return v.value
+}
+func (v *StrValue) Set(val string) error {
+	v.isSet = true
+	v.value = val
+	return nil
+}
+
 func main() {
+	mcDir := StrValue{
+		isSet: false,
+		value: _minecraftDir(),
+	}
+
+	// Look for MultiMC on the path
+	var mmcDir string
+	if path, err := exec.LookPath("MultiMC"); err == nil {
+		if path, err := filepath.EvalSymlinks(path); err == nil {
+			mmcDir = filepath.Dir(path)
+		}
+	}
+
 	// Register
 	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
+	flag.StringVar(&mmcDir, "mmcdir", mmcDir, "Path to directory containing MultiMC executable.")
+	flag.Var(&mcDir, "mcdir", "Minecraft home folder to use. If -mmc is used, will use the value of -mmcdir as the default.")
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
 	flag.BoolVar(&ARG_IGNORE_FAILED_DOWNLOADS, "ignore", false, "Ignore failed mod downloads when installing a pack")
@@ -573,6 +609,20 @@ func main() {
 		usage()
 		os.Exit(-1)
 	}
+
+	if ARG_MMC {
+		if mmcDir == "" {
+			log.Fatal("-mmc specified, but could not find MultiMC executable! Set MultiMC directory using -mmcdir")
+		}
+		if _, err := exec.LookPath(filepath.Join(mmcDir, "MultiMC")); err != nil {
+			log.Fatalf("Invalid MultiMC path specified: %s", mmcDir)
+		}
+		if !mcDir.isSet {
+			_ = mcDir.Set(mmcDir)
+		}
+	}
+	envData.MinecraftDir = mcDir.String()
+	envData.MultiMCDir = mmcDir
 
 	// Initialize our environment
 	err := initEnv()
