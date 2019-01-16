@@ -49,10 +49,10 @@ func _mmcInstancesDir() (string, error) {
 
 func generateMMCConfig(pack *ModPack) error {
 	fmt.Printf("Generating instance.cfg for MultiMC\n")
-	cfg := fmt.Sprintf(MMC_CONFIG, pack.fullName())
-
-	// Write it out
-	if err := ioutil.WriteFile(filepath.Join(pack.rootPath, "instance.cfg"), []byte(cfg), 0644); err != nil {
+	instFile := filepath.Join(pack.rootPath, "instance.cfg")
+	if fileExists(instFile) {
+		fmt.Printf("  Already exists... Skipping\n")
+	} else if err := ioutil.WriteFile(instFile, []byte(fmt.Sprintf(MMC_CONFIG, pack.fullName())), 0644); err != nil {
 		return fmt.Errorf("failed to save instance.cfg: %+v", err)
 	}
 
@@ -71,7 +71,10 @@ func generateMMCConfig(pack *ModPack) error {
 	}, "components")
 	_, _ = mmcpack.Set(1, "formatVersion")
 
-	if err := writeJSON(mmcpack, filepath.Join(pack.rootPath, "mmc-pack.json")); err != nil {
+	packFile := filepath.Join(pack.rootPath, "mmc-pack.json")
+	if fileExists(packFile) {
+		fmt.Printf("  Already exists... Skipping\n")
+	} else if err := writeJSON(mmcpack, packFile); err != nil {
 		return fmt.Errorf("failed to save mmc-pack.json: %+v", err)
 	}
 
