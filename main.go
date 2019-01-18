@@ -32,6 +32,8 @@ import (
 	"time"
 
 	"github.com/xeonx/timeago"
+
+	"mcdex/algo"
 )
 
 var version string
@@ -91,7 +93,6 @@ var gCommands = map[string]command{
 		ArgsCount: 0,
 		Args:      "[<minecraft version>]",
 	},
-
 	"mod.select": {
 		Fn:        cmdModSelect,
 		Desc:      "Select a mod to include in the specified pack",
@@ -103,6 +104,18 @@ var gCommands = map[string]command{
 		Desc:      "Select a client-side only mod to include in the specified pack",
 		ArgsCount: 2,
 		Args:      "<directory/name> <mod name or URL> [<tag>]",
+	},
+	"mod.remove.single": {
+		Fn:        cmdModRemoveSingle,
+		Desc:      "Removes a single mod from the specified pack",
+		ArgsCount: 2,
+		Args:      "<directory/name> <mod name>",
+	},
+	"mod.remove.recursive": {
+		Fn:        cmdModRemoveRecursive,
+		Desc:      "Removes a mod, and all dependant mods, from the specified pack",
+		ArgsCount: 2,
+		Args:      "<directory/name> <mod name>",
 	},
 	"mod.update.all": {
 		Fn:        cmdModUpdateAll,
@@ -293,6 +306,261 @@ func cmdModSelectClient() error {
 	return _modSelect(flag.Arg(1), flag.Arg(2), flag.Arg(3), true)
 }
 
+
+func _initRemove(cp *ModPack, modName string, maxDepth int) (info *DepInfo, err error) {
+	db, err := OpenDatabase()
+	if err != nil {
+		return
+	}
+
+	// Try to lookup the mod ID by name
+	modID, err := db.findModByName(modName)
+	if err != nil {
+		return
+	}
+
+	modID, err = cp.lookupFileId(modID)
+	if err != nil {
+		err = fmt.Errorf("failed to lookup id of mod: %v", err)
+		return
+	}
+
+	return _processDeps(cp, db, modID, maxDepth)
+}
+
+type DepInfo struct {
+	target *ManifestFileEntry
+	dependents map[*ManifestFileEntry][]*ManifestFileEntry
+	dependencies map[*ManifestFileEntry][]*ManifestFileEntry
+	optionals map[*ManifestFileEntry][]*ManifestFileEntry
+}
+func _processDeps(cp *ModPack, db *Database, targetModId, maxDepth int) (*DepInfo, error) {
+	mods, err := db.buildDepGraph(cp)
+	if err != nil {
+		return nil, err
+	}
+
+	relatedMods := make(map[*algo.Node]struct{})
+	result := DepInfo{
+		dependents:   make(map[*ManifestFileEntry][]*ManifestFileEntry),
+		dependencies: make(map[*ManifestFileEntry][]*ManifestFileEntry),
+		optionals:    make(map[*ManifestFileEntry][]*ManifestFileEntry),
+	}
+
+	// Find all dependents
+	{
+		var deps []*algo.Node
+		for _, m := range mods {
+			entry := m.Value.(*ManifestFileEntry)
+			if entry.fileId == targetModId {
+				deps = append(deps, m)
+				result.target = entry
+				break
+			}
+		}
+
+		depths := []int{0}
+		for len(deps) > 0 && (maxDepth < 0 || depths[0] < maxDepth) {
+			d := deps[0]
+			depth := depths[0] + 1
+			relatedMods[d] = struct{}{}
+			deps = deps[1:]
+			depths = depths[1:]
+
+			for dd := range d.Dependents {
+				depths = append(depths, depth)
+				deps = append(deps, dd)
+				r := result.dependents[dd.Value.(*ManifestFileEntry)]
+				result.dependents[dd.Value.(*ManifestFileEntry)] = append(r, d.Value.(*ManifestFileEntry))
+			}
+		}
+	}
+
+	// Find all dependencies that will no longer have a dependent
+	{
+		sorted := mods.Sorted()
+	Outer:
+		for _, m := range sorted {
+			// Only looking at dependencies here, any roots would have been included above
+			if m.IsRoot() {
+				continue
+			}
+			// Already included
+			if _, found := relatedMods[m]; found {
+				continue
+			}
+			var parents []*ManifestFileEntry
+			for d := range m.Dependents {
+				if _, found := relatedMods[d]; !found {
+					continue Outer // Still has a dependent
+				}
+				parents = append(parents, d.Value.(*ManifestFileEntry))
+			}
+
+			// All dependents included
+			relatedMods[m] = struct{}{}
+			result.dependencies[m.Value.(*ManifestFileEntry)] = parents
+		}
+	}
+
+	// Find all related optional dependencies
+	{
+		for _, m := range mods {
+			if _, found := relatedMods[m]; found {
+				continue
+			}
+			var opts []*ManifestFileEntry
+			for o := range m.Optionals {
+				if _, found := relatedMods[o]; found {
+					opts = append(opts, o.Value.(*ManifestFileEntry))
+				}
+			}
+			if len(opts) > 0 {
+				result.optionals[m.Value.(*ManifestFileEntry)] = opts
+			}
+		}
+	}
+
+	return &result, nil
+}
+
+func cmdModRemoveSingle() error {
+	// Try to open the mod pack
+	cp, err := NewModPack(flag.Arg(1), true, ARG_MMC)
+	if err != nil {
+		return err
+	}
+
+	depInfo, err := _initRemove(cp, flag.Arg(2), 1)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("Preparing to remove the mod:")
+	fmt.Printf("\t[%7d] %q (%s)\n", depInfo.target.fileId, depInfo.target.name, depInfo.target.file)
+
+	fmt.Println()
+	fmt.Println("The following mods depend on the mod being removed and will no longer work:")
+	for d := range depInfo.dependents {
+		fmt.Printf("\t[%7d] %q (%s)\n", d.fileId, d.name, d.file)
+	}
+
+	fmt.Println()
+	fmt.Println("The following mods were added as a dependency for the mod being removed and are no longer required:")
+	for d, l := range depInfo.dependencies {
+		if len(l) == 1 && l[0] == depInfo.target {
+			fmt.Printf("\t[%7d] %q (%s)\n", d.fileId, d.name, d.file)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("The following mods optionally depend on the mod being removed:")
+	for o, deps := range depInfo.optionals {
+		for _, d := range deps {
+			if d == depInfo.target {
+				fmt.Printf("\t[%7d] %q (%s)\n", o.fileId, o.name, o.file)
+				break
+			}
+		}
+	}
+
+	if !ARG_DRY_RUN {
+		fmt.Println()
+		fmt.Printf("Removing [%7d] %q - %q\n", depInfo.target.fileId, depInfo.target.name, depInfo.target.file)
+		if err := cp.manifest.ArrayRemove(depInfo.target.idx, "files"); err != nil {
+			return fmt.Errorf("failed to remove mod %q from manifest", depInfo.target.name)
+		}
+		if err := cp.saveManifest(); err != nil {
+			return fmt.Errorf("failed to save changes to manifest")
+		}
+		if depInfo.target.file != "" {
+			if err := os.Remove(filepath.Join(cp.modPath(), depInfo.target.file)); err != nil {
+				log.Println("Warning: ", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func cmdModRemoveRecursive() error {
+	// Try to open the mod pack
+	cp, err := NewModPack(flag.Arg(1), true, ARG_MMC)
+	if err != nil {
+		return err
+	}
+
+	depInfo, err := _initRemove(cp, flag.Arg(2), -1)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("Preparing to remove the mod:")
+	fmt.Printf("\t[%7d] %q (%s)\n", depInfo.target.fileId, depInfo.target.name, depInfo.target.file)
+
+	rmList := []*ManifestFileEntry{depInfo.target}
+
+	fmt.Println()
+	fmt.Println("The following dependent mods will also be removed:")
+	for m, d := range depInfo.dependents {
+		fmt.Printf("\t[%7d] %q (%s)\n\t\tDepends on %s\n", m.fileId, m.name, m.file, QuoteJoin(d,", "))
+		rmList = append(rmList, m)
+	}
+
+	fmt.Println()
+	fmt.Println("The following dependencies will also be removed:")
+	for m, d := range depInfo.dependencies {
+		fmt.Printf("\t[%7d] %q (%s)\n\t\tRequired by %s\n", m.fileId, m.name, m.file, QuoteJoin(d, ", "))
+		rmList = append(rmList, m)
+	}
+
+	fmt.Println()
+	fmt.Println("The following mods optionally depend on a mod being removed:")
+	for d, o := range depInfo.optionals {
+		fmt.Printf("\t[%7d] %q optionally depends on %s\n", d.fileId, d.name, QuoteJoin(o, ", "))
+		rmList = append(rmList, d)
+	}
+
+	if !ARG_DRY_RUN {
+		// Reverse sort by index so we remove from the back
+		sort.Slice(rmList, func(i, j int) bool {
+			return rmList[j].idx < rmList[i].idx
+		})
+
+		fmt.Println()
+
+		var done int
+		for _, m := range rmList{
+			fmt.Printf("Removing [%7d] %q - %q\n", m.fileId, m.name, m.file)
+			if err := cp.manifest.ArrayRemove(m.idx, "files"); err != nil {
+				log.Printf("Failed to remove mod %q from manifest\n", depInfo.target.name)
+				continue
+			}
+			done++
+			if m.file != "" {
+				if err := os.Remove(filepath.Join(cp.modPath(), m.file)); err != nil {
+					log.Println("Warning: ", err)
+				}
+			}
+		}
+		if done > 0 {
+			if err := cp.saveManifest(); err != nil {
+				return fmt.Errorf("failed to save changes to manifest")
+			}
+		} else {
+			return fmt.Errorf("failed to remove any mods; no changes have been made")
+		}
+		if done < len(rmList) {
+			return fmt.Errorf("some mods could not be removed; pack may be in an invalid state")
+		}
+	}
+
+	return nil
+}
+
+
 var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
 func _modSelect(dir, mod, tag string, clientOnly bool) error {
@@ -342,7 +610,7 @@ func _modSelect(dir, mod, tag string, clientOnly bool) error {
 	}
 
 	err = _selectModFromID(cp, db, modID, fileID, clientOnly)
-	if err == nil {
+	if err == nil && !ARG_DRY_RUN {
 		return cp.saveManifest()
 	}
 
@@ -350,13 +618,38 @@ func _modSelect(dir, mod, tag string, clientOnly bool) error {
 }
 
 func _selectModFromID(pack *ModPack, db *Database, modID, fileID int, clientOnly bool) error {
+	if modFile, err := _lookupModByID(pack, db, modID, fileID); err == nil {
+		err := pack.selectModFile(modFile, clientOnly)
+		if err != nil {
+			return err
+		}
+
+		deps, err := db.getDeps(modFile.fileID)
+		if err != nil {
+			return fmt.Errorf("Error pulling deps for %d: %+v", modFile.fileID, err)
+		}
+
+		for _, dep := range deps {
+			err = _selectModFromID(pack, db, dep, 0, clientOnly)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	} else {
+		return err
+	}
+}
+
+func _lookupModByID(pack *ModPack, db *Database, modID, fileID int) (*ModFile, error) {
 	// At this point, we should have a modID and we may have a fileID. We want to walk major.minor.[patch]
 	// versions, and find either the latest file for our version of minecraft or verify that the fileID
 	// we have will work on this version
 	major, minor, patch, err := parseVersion(pack.minecraftVersion())
 	if err != nil {
 		// Invalid version string?!
-		return err
+		return nil, err
 	}
 
 	// Walk down patch versions, looking for our mod + file (or latest file if no fileID available)
@@ -368,31 +661,12 @@ func _selectModFromID(pack *ModPack, db *Database, modID, fileID int, clientOnly
 			vsn = fmt.Sprintf("%d.%d", major, minor)
 		}
 
-		modFile, err := db.findModFile(modID, fileID, vsn)
-		if err == nil {
-			err := pack.selectModFile(modFile, clientOnly)
-			if err != nil {
-				return err
-			}
-
-			deps, err := db.getDeps(modFile.fileID)
-			if err != nil {
-				return fmt.Errorf("Error pulling deps for %d: %+v", modFile.fileID, err)
-			}
-
-			for _, dep := range deps {
-				err = _selectModFromID(pack, db, dep, 0, clientOnly)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
+		if modFile, err := db.findModFile(modID, fileID, vsn); err == nil {
+			return modFile, nil
 		}
 	}
 
-	// Didn't find a file that matches :(
-	return fmt.Errorf("No compatible file found for %d\n", modID)
+	return nil, fmt.Errorf("No compatible file found for %d\n", modID)
 }
 
 func listProjects(ptype int) error {
@@ -685,6 +959,10 @@ func main() {
 		console("ERROR: insufficient arguments for %s\n", commandName)
 		console("usage: mcdex %s %s\n", commandName, command.Args)
 		os.Exit(-1)
+	}
+
+	if ARG_DRY_RUN {
+		fmt.Printf("--- DRY RUN ---\n")
 	}
 
 	err = command.Fn()

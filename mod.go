@@ -22,4 +22,18 @@ type ModFile struct {
 	modID   int
 	modName string
 	modDesc string
+	slug    string
+}
+
+type ManifestFileEntry struct {
+	idx  int
+	file string
+
+	fileId int
+	projId int
+	name   string
+}
+
+func (m *ManifestFileEntry) String() string {
+	return m.name
 }

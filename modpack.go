@@ -362,7 +362,7 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 	modInfo["projectID"] = modFile.modID
 	modInfo["fileID"] = modFile.fileID
 	modInfo["required"] = true
-	modInfo["desc"] = modFile.modName
+	modInfo["desc"] = modFile.slug
 
 	if clientOnly {
 		modInfo["clientOnly"] = true
@@ -593,4 +593,15 @@ func (pack *ModPack) installServer() error {
 
 func (pack *ModPack) generateMMCConfig() error {
 	return generateMMCConfig(pack)
+}
+
+func (pack *ModPack) lookupFileId(projectId int) (int, error) {
+	files, _ := pack.manifest.S("files").Children()
+	for _, file := range files {
+		if projectId == int(file.S("projectID").Data().(float64)) {
+			return int(file.S("fileID").Data().(float64)), nil
+		}
+	}
+
+	return -1, fmt.Errorf("project %d not found in manifest", projectId)
 }

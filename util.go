@@ -27,6 +27,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -259,4 +260,16 @@ func intValue(c *gabs.Container, path string) (int, error) {
 	default:
 		return 0, fmt.Errorf("Invalid type for %s: %+v", path, data)
 	}
+}
+
+func QuoteJoin(slice interface{}, sep string) string {
+	s := reflect.ValueOf(slice)
+	if s.Kind() != reflect.Slice {
+		panic(&reflect.ValueError{Method: "QuoteJoin", Kind: s.Kind()})
+	}
+	str := make([]string, s.Len())
+	for i := 0; i < len(str); i++ {
+		str[i] = fmt.Sprintf("%q", s.Index(i))
+	}
+	return strings.Join(str, sep)
 }
