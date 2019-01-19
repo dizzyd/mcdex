@@ -29,6 +29,7 @@ import (
 
 type envConsts struct {
 	MinecraftDir string
+	MultiMCDir   string
 	McdexDir     string
 	JavaDir      string
 }
@@ -37,24 +38,25 @@ var envData envConsts
 
 func initEnv() error {
 	// Get the minecraft directory, based on platform
-	mcDir := _minecraftDir()
+	mcDir := envData.MinecraftDir
+	if mcDir == "" {
+		mcDir = _minecraftDir()
+		envData.MinecraftDir = mcDir
+	}
 	os.Mkdir(mcDir, 0700)
 
 	// Get the mcdex directory, create if necessary
 	mcdexDir := filepath.Join(mcDir, "mcdex")
 	os.Mkdir(mcdexDir, 0700)
+	envData.McdexDir = mcdexDir
 
 	// Figure out where the JVM (and unpack200) commands can be found
 	javaDir := _findJavaDir(mcDir)
 	if javaDir == "" {
 		return fmt.Errorf("missing Java directory")
 	}
+	envData.JavaDir = javaDir
 
-	envData = envConsts{
-		MinecraftDir: mcDir,
-		McdexDir:     mcdexDir,
-		JavaDir:      javaDir,
-	}
 	return nil
 }
 
