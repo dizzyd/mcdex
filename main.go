@@ -48,72 +48,84 @@ type command struct {
 }
 
 var gCommands = map[string]command{
-	"pack.create": command{
+	"pack.create": {
 		Fn:        cmdPackCreate,
 		Desc:      "Create a new mod pack",
 		ArgsCount: 2,
 		Args:      "<directory> <minecraft version> [<forge version>]",
 	},
-	"pack.install": command{
+	"pack.list": {
+		Fn:        cmdPackList,
+		Desc:      "List available mod packs",
+		ArgsCount: 0,
+		Args:      "[<pack name> <minecraft version>]",
+	},
+	"pack.list.latest": {
+		Fn:        cmdPackListLatest,
+		Desc:      "List most recently updated packs",
+		ArgsCount: 0,
+		Args:      "[<minecraft version>]",
+	},
+	"pack.install": {
 		Fn:        cmdPackInstall,
 		Desc:      "Install a mod pack, optionally using a URL to download",
 		ArgsCount: 1,
 		Args:      "<directory> [<url>]",
 	},
-	"info": command{
+	"info": {
 		Fn:        cmdInfo,
 		Desc:      "Show runtime info",
 		ArgsCount: 0,
 	},
-	"mod.list": command{
+	"mod.list": {
 		Fn:        cmdModList,
 		Desc:      "List mods matching a name and Minecraft version",
 		ArgsCount: 0,
 		Args:      "[<mod name> <minecraft version>]",
 	},
-	"mod.list.latest": command{
+	"mod.list.latest": {
 		Fn:        cmdModListLatest,
 		Desc:      "List most recently updated mods",
 		ArgsCount: 0,
 		Args:      "[<minecraft version>]",
 	},
 
-	"mod.select": command{
+	"mod.select": {
 		Fn:        cmdModSelect,
 		Desc:      "Select a mod to include in the specified pack",
 		ArgsCount: 2,
 		Args:      "<directory> <mod name or URL> [<tag>]",
 	},
-	"mod.select.client": command{
+	"mod.select.client": {
 		Fn:        cmdModSelectClient,
 		Desc:      "Select a client-side only mod to include in the specified pack",
 		ArgsCount: 2,
 		Args:      "<directory> <mod name or URL> [<tag>]",
 	},
-	"mod.update.all": command{
+	"mod.update.all": {
 		Fn:        cmdModUpdateAll,
 		Desc:      "Update all mods entries to latest available file",
 		ArgsCount: 1,
 		Args:      "<directory>",
 	},
-	"server.install": command{
+	"server.install": {
 		Fn:        cmdServerInstall,
 		Desc:      "Install a Minecraft server using an existing pack",
 		ArgsCount: 1,
 		Args:      "<directory>",
 	},
-	"db.update": command{
+	"db.update": {
 		Fn:        cmdDBUpdate,
 		Desc:      "Update local database of available mods",
 		ArgsCount: 0,
 	},
-	"forge.list": command{
+	"forge.list": {
 		Fn:        cmdForgeList,
 		Desc:      "List available versions of Forge",
 		ArgsCount: 1,
 		Args:      "<minecraft version>",
 	},
-	"openeye.to.manifest": command{
+	"openeye.to.manifest": {
 		Fn:        cmdOpenEyeToManifest,
 		Desc:      "Convert an OpenEye crash dump into a manifest.json",
 		ArgsCount: 1,
@@ -164,6 +176,20 @@ func cmdPackCreate() error {
 func cmdPackInstall() error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	// If the URL is provided and doesn't actually conform with a URL spec, try to translate
+	// by treating as a slug and finding the latest file URL
+	if url != "" && !strings.HasPrefix(url, "https://") {
+		url, err = db.getLatestPackURL(url)
+		if err != nil {
+			return err
+		}
+	}
 
 	// Only require a manifest if we're not installing from a URL
 	requireManifest := (url == "")
@@ -353,7 +379,7 @@ func _selectModFromID(pack *ModPack, db *Database, modID, fileID int, clientOnly
 	return fmt.Errorf("No compatible file found for %d\n", modID)
 }
 
-func cmdModList() error {
+func listProjects(ptype int) error {
 	name := flag.Arg(1)
 	mcvsn := flag.Arg(2)
 
@@ -362,10 +388,18 @@ func cmdModList() error {
 		return err
 	}
 
-	return db.listMods(name, mcvsn)
+	return db.printProjects(name, mcvsn, ptype)
 }
 
-func cmdModListLatest() error {
+func cmdModList() error {
+	return listProjects(0)
+}
+
+func cmdPackList() error {
+	return listProjects(1)
+}
+
+func listLatestProjects(ptype int) error {
 	mcvsn := flag.Arg(1)
 
 	db, err := OpenDatabase()
@@ -373,7 +407,15 @@ func cmdModListLatest() error {
 		return err
 	}
 
-	return db.listLatestMods(mcvsn)
+	return db.printLatestProjects(mcvsn, ptype)
+}
+
+func cmdModListLatest() error {
+	return listLatestProjects(0)
+}
+
+func cmdPackListLatest() error {
+	return listLatestProjects(1)
 }
 
 func cmdModUpdateAll() error {

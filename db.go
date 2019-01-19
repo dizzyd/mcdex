@@ -63,13 +63,13 @@ func OpenDatabase() (*Database, error) {
 
 func InstallDatabase() error {
 	// Get the latest version
-	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v3")
+	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v4")
 	if err != nil {
 		return err
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
-	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v3-%s.dat.bz2", version)
+	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v4-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
@@ -163,19 +163,19 @@ func (db *Database) lookupMcVsn(forgeVsn string) (string, error) {
 	return mcVsn, nil
 }
 
-func (db *Database) listMods(slug, mcvsn string) error {
+func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
 	// Turn the name into a pre-compiled regex
 	slugRegex, err := regexp.Compile("(?i)" + slug)
 	if err != nil {
 		return fmt.Errorf("Failed to convert %s into regex: %s", slug, err)
 	}
 
-	query := "select slug, description, downloads from mods where modid in (select modid from modfiles where version = ?) order by slug"
+	query := "select slug, description, downloads from projects where type = ? and projectid in (select projectid from files where version = ?) order by slug"
 	if mcvsn == "" {
-		query = "select slug, description, downloads from mods order by slug"
+		query = "select slug, description, downloads from projects where type = ? order by slug"
 	}
 
-	rows, err := db.sqlDb.Query(query, mcvsn)
+	rows, err := db.sqlDb.Query(query, ptype, mcvsn)
 	if err != nil {
 		return fmt.Errorf("Query failed: %+v", err)
 	}
@@ -183,24 +183,26 @@ func (db *Database) listMods(slug, mcvsn string) error {
 
 	// For each row, check the name against the pre-compiled regex
 	for rows.Next() {
-		var modSlug, modDesc string
-		var modDownloads int
-		err = rows.Scan(&modSlug, &modDesc, &modDownloads)
+		var slug, desc string
+		var downloads int
+		err = rows.Scan(&slug, &desc, &downloads)
 		if err != nil {
 			return err
 		}
 
-		if slug == "" || slugRegex.MatchString(modSlug) {
+		if slug == "" || slugRegex.MatchString(slug) {
 			msg := message.NewPrinter(language.English)
-			msg.Printf("%s | %s | %d downloads\n", modSlug, modDesc, modDownloads)
+			msg.Printf("%s | %s | %d downloads\n", slug, desc, downloads)
 		}
 	}
 
 	return nil
 }
 
-func (db *Database) listLatestMods(mcvsn string) error {
-	rows, err := db.sqlDb.Query("select slug, description, downloads from mods where modid in (select modid from modfiles order by tstamp desc) limit 100")
+func (db *Database) printLatestProjects(mcvsn string, ptype int) error {
+	rows, err := db.sqlDb.Query(`select slug, description, downloads from projects 
+									    where type = ? and projectid in 
+									    (select projectid from files order by tstamp desc) limit 100`, ptype)
 	if err != nil {
 		return fmt.Errorf("Query failed: %+v", err)
 	}
@@ -230,7 +232,7 @@ func (db *Database) getLatestFileTstamp() (int, error) {
 func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {
 	// First, look up the modid for the given name
 	var name, desc string
-	err := db.sqlDb.QueryRow("select name, description from mods where modid = ?", modID).Scan(&name, &desc)
+	err := db.sqlDb.QueryRow("select name, description from projects where type = 0 and projectid = ?", modID).Scan(&name, &desc)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, fmt.Errorf("No mod found %d", modID)
@@ -240,7 +242,7 @@ func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) 
 
 	// Now find the latest release or beta version
 	var fileID int
-	err = db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+	err = db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
 		modID, mcvsn).Scan(&fileID)
 	switch {
 	case err == sql.ErrNoRows:
@@ -252,9 +254,9 @@ func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) 
 	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
 }
 
-func (db *Database) findModBySlug(slug string) (int, error) {
+func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
 	var modID int
-	err := db.sqlDb.QueryRow("select modid from mods where slug = ?", slug).Scan(&modID)
+	err := db.sqlDb.QueryRow("select projectid from projects where type = ? and slug = ?", ptype, slug).Scan(&modID)
 	switch {
 	case err == sql.ErrNoRows:
 		return -1, fmt.Errorf("No mod found %s", slug)
@@ -264,9 +266,13 @@ func (db *Database) findModBySlug(slug string) (int, error) {
 	return modID, nil
 }
 
+func (db *Database) findModBySlug(slug string) (int, error) {
+	return db.findProjectBySlug(slug, 0)
+}
+
 func (db *Database) findModByName(name string) (int, error) {
 	var modID int
-	err := db.sqlDb.QueryRow("select modid from mods where name = ? or slug = ?", name, name).Scan(&modID)
+	err := db.sqlDb.QueryRow("select projectid from projects where type = 0 and (name = ? or slug = ?)", name, name).Scan(&modID)
 	switch {
 	case err == sql.ErrNoRows:
 		return -1, fmt.Errorf("No mod found %s", name)
@@ -279,12 +285,12 @@ func (db *Database) findModByName(name string) (int, error) {
 func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, error) {
 	// Try to match the file ID
 	if fileID > 0 {
-		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and fileid = ? and version = ?", modID, fileID, mcversion).Scan(&fileID)
+		err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and fileid = ? and version = ?", modID, fileID, mcversion).Scan(&fileID)
 		if err != nil {
 			return nil, fmt.Errorf("No matching file ID for %s version", mcversion)
 		}
 	} else {
-		err := db.sqlDb.QueryRow("select fileid from modfiles where modid = ? and version = ? order by tstamp desc limit 1",
+		err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
 			modID, mcversion).Scan(&fileID)
 		if err != nil {
 			return nil, fmt.Errorf("No recent file for mod %d / %s version", modID, mcversion)
@@ -293,7 +299,7 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 
 	// We matched some file; pull the name and description for the mod
 	var name, desc string
-	err := db.sqlDb.QueryRow("select slug, description from mods where modid = ?", modID).Scan(&name, &desc)
+	err := db.sqlDb.QueryRow("select slug, description from projects where projectid = ?", modID).Scan(&name, &desc)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve name, description for mod %d: %+v", modID, err)
 	}
@@ -303,7 +309,7 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 
 func (db *Database) getDeps(fileID int) ([]int, error) {
 	var result []int
-	rows, err := db.sqlDb.Query("SELECT depid, level FROM moddeps WHERE fileid = ? and level == 1", fileID)
+	rows, err := db.sqlDb.Query("SELECT projectid, level FROM deps WHERE fileid = ? and level == 1", fileID)
 
 	switch {
 	case err == sql.ErrNoRows:
@@ -324,4 +330,27 @@ func (db *Database) getDeps(fileID int) ([]int, error) {
 	}
 
 	return result, nil
+}
+
+func (db *Database) getLatestPackURL(slug string) (string, error) {
+	// First try to find the pack by looking for the specific slug
+	pid, err := db.findProjectBySlug(slug, 1)
+	if err != nil {
+		return "", err
+	}
+
+	// Find the latest file given the project ID; we don't need to worry about matching the MC version,
+	// since modpacks are always locked to a specific version anyways
+	var fileID int
+	err = db.sqlDb.QueryRow("select fileid from files where projectid = ? order by tstamp desc limit 1", pid).Scan(&fileID)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("No modpack file found for %s", slug)
+	case err != nil:
+		return "", err
+	}
+
+	// Construct a URL using the slug and file ID
+	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil;
+
 }
