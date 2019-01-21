@@ -20,20 +20,43 @@ First, make sure you have the most recent database of mods:
 mcdex db.update
 ```
 
+## Listing available mod packs on Curseforge
+
+If you want to find all the published modpacks available with 'engineer' in the name, you can do:
+
+```
+mcdex pack.list engineer 
+```
+
+You'll see output like:
+
+```
+advanced-engineering-immersive-rocketry | A RotaryCraft-esque pack for 1.12 | 154 downloads
+age-of-engineering | Tech-only modpack with guide and trophies. Focus in progression, divided in 15 ages | 438,304 downloads
+ancient-engineering | A light pack focused around Ancient Warfare and Immersive Engineering. | 4,856 downloads
+arie-advanced-engineering | Modpack filled with immersive tech mods, combined with the possibility of exploring the galaxy! | 53 downloads
+atmospheric-engineering | an overloaded skyfactory style modpack | 0 downloads
+coles-engineering | An engineering modpack with big dig vibes | 60 downloads
+...
+...
+```
+
+The first part of each line is the "slug"; we'll use this in the next step to install the modpack.
+
 ## Installing a modpack from Curseforge
 
-Let's install the [Age of Engineering](https://minecraft.curseforge.com/projects/age-of-engineering) modpack.
+Now, let's install the [Age of Engineering](https://minecraft.curseforge.com/projects/age-of-engineering) modpack.
 
-Find the modpack URL on Curseforge. Then on the console, run:
+Using the slug we found via pack.list, run:
 ```
-mcdex pack.install aoe1.0.3 https://minecraft.curseforge.com/projects/age-of-engineering/files/2446286
+mcdex pack.install aoe age-of-engineering
 ```
 
-Note that we provide the name "aoe1.0.3"; mcdex uses this to install the modpack into your Minecraft home directory
-under ```<minecraft>/mcdex/pack/aoe1.0.3```. Alternatively, you can control what directory the modpack is installed in by passing
-an absolute path (e.g. `c:\aoe1.0.3` or `/Users/dizzyd/aoe1.0.3`) as the name and mcdex will use that instead.
+Note that we provide the name "aoe"; mcdex uses this to install the modpack into your Minecraft home directory
+under ```<minecraft>/mcdex/pack/aoe```. Alternatively, you can control what directory the modpack is installed in by passing
+an absolute path (e.g. `c:\aoe` or `/Users/dizzyd/aoe`) as the name and mcdex will use that instead.
 
-Once the install is done, you can fire up the Minecraft launcher and you should have a new profile for the aoe1.0.3 pack!
+Once the install is done, you can fire up the Minecraft launcher and you should have a new profile for the aoe pack!
 
 ## Creating a new modpack
 
@@ -65,10 +88,10 @@ Once you have a modpack, either installed from CurseForge or one you created loc
 add [Immersive Engineering](https://minecraft.curseforge.com/projects/immersive-engineering) to our new pack:
 
 ```
-mcdex mod.select mypack 'Immersive Engineering'
+mcdex mod.select mypack immersive-engineering
 ```
 
-This will search the database of mods for one named 'Immersive Engineering' and find the most recent stable version and
+This will search the database of mods for one named 'immersive-engineering' and find the most recent stable version and
 add it to the pack's manifest.jason. To actually install the mod, you need to install the pack:
 
 ```
