@@ -66,7 +66,7 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 		}
 	} else if dir == "." {
 		pack.rootPath, _ = os.Getwd()
-		pack.name = filepath.Base(dir)
+		pack.name = filepath.Base(pack.rootPath)
 	} else {
 		pack.rootPath = filepath.Join(env().McdexDir, "pack", dir)
 		pack.name = dir
