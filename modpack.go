@@ -19,12 +19,14 @@ package main
 
 import (
 	"archive/zip"
+	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"io/ioutil"
+	"time"
 
 	"github.com/Jeffail/gabs"
 )
@@ -604,4 +606,37 @@ func (pack *ModPack) lookupFileId(projectId int) (int, error) {
 	}
 
 	return -1, fmt.Errorf("project %d not found in manifest", projectId)
+}
+
+func (pack *ModPack) getSelected(db *Database) ([]*ModDetails, error) {
+	detailQuery, err := db.sqlDb.Prepare("SELECT DISTINCT name, slug, description, f.tstamp FROM files f, projects p WHERE f.fileid = ? AND f.projectid = ? AND p.projectid = f.projectid")
+	if err != nil {
+		return nil, err
+	}
+	defer detailQuery.Close()
+
+	files, _ := pack.manifest.S("files").Children()
+	results := make([]*ModDetails, 0, len(files))
+	for _, file := range files {
+		var record ModDetails
+		if file.Exists("filename") {
+			record.filename = file.S("filename").Data().(string)
+		}
+
+		record.projectID = int(file.S("projectID").Data().(float64))
+		record.fileID = int(file.S("fileID").Data().(float64))
+		var ts int64
+		err = detailQuery.QueryRow(record.fileID, record.projectID).Scan(&record.name, &record.slug, &record.description, &ts)
+		switch {
+		case err == sql.ErrNoRows:
+			log.Printf("No mod found in database with project id %d and file id %d - File: %q", record.projectID, record.fileID, record.filename)
+		case err != nil:
+			return nil, err
+		}
+		record.timestamp = time.Unix(ts, 0)
+
+		results = append(results, &record)
+	}
+
+	return results, nil
 }

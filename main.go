@@ -76,6 +76,12 @@ var gCommands = map[string]command{
 		ArgsCount: 1,
 		Args:      "<directory/name> [<url>]",
 	},
+	"pack.show": {
+		Fn:        cmdPackShow,
+		Desc:      "List all mods included in the specified installed pack",
+		ArgsCount: 1,
+		Args:      "<directory/name>",
+	},
 	"info": {
 		Fn:        cmdInfo,
 		Desc:      "Show runtime info",
@@ -270,6 +276,28 @@ func cmdPackInstall() error {
 		if err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func cmdPackShow() error {
+	// Try to open the mod pack
+	cp, err := NewModPack(flag.Arg(1), true, ARG_MMC)
+	if err != nil {
+		return err
+	}
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	mods, err := cp.getSelected(db)
+	sort.Slice(mods, func(i, j int) bool {return mods[i].name < mods[j].name})
+	fmt.Println( "  File ID || Project ID|| Name || Slug || Description || Released || Filename")
+	for _, mod := range mods {
+		console("%9d || %9d || %s || %s || %s || %v || %s\n", mod.fileID, mod.projectID, mod.name, mod.slug, mod.description, mod.timestamp, mod.filename)
 	}
 
 	return nil

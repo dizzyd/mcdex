@@ -17,6 +17,8 @@
 
 package main
 
+import "time"
+
 type ModFile struct {
 	fileID  int
 	modID   int
@@ -36,4 +38,14 @@ type ManifestFileEntry struct {
 
 func (m *ManifestFileEntry) String() string {
 	return m.name
+}
+
+type ModDetails struct {
+	fileID      int
+	projectID   int
+	name        string
+	slug        string
+	description string
+	filename    string
+	timestamp   time.Time
 }
