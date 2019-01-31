@@ -587,13 +587,14 @@ func cmdModRemoveRecursive() error {
 		return err
 	}
 
+	rmList := make([]*ManifestFileEntry, 0, len(depInfo.targets)+len(depInfo.dependencies)+len(depInfo.dependents))
+
 	fmt.Println()
 	fmt.Println("Preparing to remove the mod(s):")
 	for target := range depInfo.targets {
 		fmt.Printf("\t[%7d] %q (%s)\n", target.fileId, target.name, target.file)
+		rmList = append(rmList, target)
 	}
-
-	rmList := make([]*ManifestFileEntry, len(depInfo.targets)+len(depInfo.dependencies)+len(depInfo.dependents))
 
 	fmt.Println()
 	fmt.Println("The following dependent mods will also be removed:")
@@ -613,7 +614,6 @@ func cmdModRemoveRecursive() error {
 	fmt.Println("The following mods optionally depend on a mod being removed:")
 	for d, o := range depInfo.optionals {
 		fmt.Printf("\t[%7d] %q optionally depends on %s\n", d.fileId, d.name, QuoteJoin(o, ", "))
-		rmList = append(rmList, d)
 	}
 
 	return _removeMods(cp, rmList)
