@@ -38,6 +38,7 @@ type ModPack struct {
 	gameDir  string
 	modDir   string
 	manifest *gabs.Container
+	modCache *MetaCache
 }
 
 func (pack *ModPack) gamePath() string { return filepath.Join(pack.rootPath, pack.gameDir) }
@@ -101,6 +102,11 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 		return nil, fmt.Errorf("Failed to create %s: %+v", pack.modPath(), err)
 	}
 
+	pack.modCache, err = OpenMetaCache(pack)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to open mod cache: %+v", err)
+	}
+
 	return pack, nil
 }
 
@@ -116,9 +122,9 @@ func (pack *ModPack) download(url string) error {
 	packFilename := filepath.Join(pack.gamePath(), "pack.zip")
 
 	if origURL != url {
-		// Remove pack.zip and all mod files
+		// Remove pack.zip; this used to also remove the mods, but with the more
+		// advanced metacache tracking, we can intelligently only update files that changed
 		os.Remove(packFilename)
-		os.RemoveAll(pack.modPath())
 
 	} else if fileExists(packFilename) {
 		return nil
@@ -287,19 +293,21 @@ func (pack *ModPack) installMods(isClient bool, ignoreFailedDownloads bool) erro
 			continue
 		}
 
-		// If we have an entry with the filename, check to see if it exists;
-		// bail if so
-		baseFilename := f.Path("filename").Data()
-		if baseFilename != nil && baseFilename != "" {
-			filename := filepath.Join(pack.modPath(), baseFilename.(string))
-			if fileExists(filename) {
-				fmt.Printf("Skipping %s\n", baseFilename.(string))
-				continue
-			}
-		}
-
+		// Get the project & file ID
 		projectID := int(f.Path("projectID").Data().(float64))
 		fileID := int(f.Path("fileID").Data().(float64))
+
+		// Check the mod cache to see if we already have the right file ID installed
+		lastFileId, lastFilename := pack.modCache.GetLastModFile(projectID)
+		if lastFileId == fileID {
+			// Nothing to do; we can skip this installed file
+			fmt.Printf("Skipping %s\n", lastFilename)
+			continue
+		} else if lastFileId > 0 {
+			// A different version of the file is installed; clean it up
+			pack.modCache.CleanupModFile(projectID)
+		}
+
 		filename, err := pack.installMod(projectID, fileID)
 		if err != nil {
 			if ignoreFailedDownloads {
@@ -307,26 +315,36 @@ func (pack *ModPack) installMods(isClient bool, ignoreFailedDownloads bool) erro
 			} else {
 				return err
 			}
-		}
-
-		f.Set(filename, "filename")
-
-		err = pack.saveManifest()
-		if err != nil {
-			return err
+		} else {
+			// Download succeeded; register this mod as installed in the cache
+			pack.modCache.AddModFile(projectID, fileID, filename)
 		}
 	}
 
 	// Also process any extfiles entries
 	extFiles, _ := pack.manifest.S("extfiles").ChildrenMap()
-	for _, url := range extFiles {
-		_, err := pack.installModURL(url.Data().(string))
+	for key, url := range extFiles {
+		// Check the cache to see if the URL has changed
+		lastUrl, lastFilename := pack.modCache.GetLastExtURL(key)
+		if lastUrl == url.Data().(string) {
+			// Nothing to do; we already have a file installed
+			fmt.Printf("Skipping %s\n", lastFilename)
+			continue
+		} else if lastUrl != "" {
+			// A different version of the file is installed; clean it up
+			pack.modCache.CleanupExtFile(key)
+		}
+
+		filename, err := pack.installModURL(url.Data().(string))
 		if err != nil {
 			if ignoreFailedDownloads {
 				fmt.Printf("Ignoring failed download: %+v\n", err)
 			} else {
 				return err
 			}
+		} else {
+			// Download succeeded; register this file
+			pack.modCache.AddExtFile(key, url.String(), filename)
 		}
 	}
 
@@ -358,15 +376,6 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 		if childProjectID == modFile.modID {
 			// Found a matching project ID; note the index so we can replace it
 			existingIndex = i
-
-			// Also, delete any mod files listed by name
-			filename, ok := child.S("filename").Data().(string)
-			filename = filepath.Join(pack.modPath(), filename)
-			if ok && fileExists(filename) {
-				// Try to remove the file; don't worry about error case
-				os.Remove(filename)
-			}
-
 			break
 		}
 	}
@@ -417,15 +426,6 @@ func (pack *ModPack) updateMods(db *Database, dryRun bool) error {
 			child.Set(latestFile.fileID, "fileID")
 			child.Set(latestFile.modName, "desc")
 			fmt.Printf("Updating %s: %d -> %d\n", latestFile.modName, fileID, latestFile.fileID)
-
-			// Delete the old file if it exists
-			filename, ok := child.S("filename").Data().(string)
-			filename = filepath.Join(pack.modPath(), filename)
-			if ok && fileExists(filename) {
-				// Try to remove the file; don't worry about error case
-				os.Remove(filename)
-			}
-			child.Delete("filename")
 		}
 	}
 
