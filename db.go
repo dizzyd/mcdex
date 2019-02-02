@@ -384,12 +384,14 @@ func (db *Database) buildDepGraph(m *ModPack) (algo.Graph, error) {
 		fileIds = make(map[int]*ManifestFileEntry, len(files))
 		for i, file := range files {
 			record := ManifestFileEntry{idx: i}
-			if file.Exists("filename") {
-				record.file = file.S("filename").Data().(string)
-			}
 
 			record.projId = int(file.S("projectID").Data().(float64))
 			record.fileId = int(file.S("fileID").Data().(float64))
+
+			if fid, filename := m.modCache.GetLastModFile(record.projId); fid > 0 {
+				record.file = filename
+			}
+
 			err = nameQuery.QueryRow(record.fileId, record.projId).Scan(&record.name)
 			switch {
 			case err == sql.ErrNoRows:

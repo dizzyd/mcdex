@@ -513,10 +513,8 @@ func _removeMods(cp *ModPack, mods []*ManifestFileEntry) error {
 			continue
 		}
 		done++
-		if m.file != "" {
-			if err := os.Remove(filepath.Join(cp.modPath(), m.file)); err != nil {
-				log.Println("Warning: ", err)
-			}
+		if err := cp.modCache.CleanupModFile(m.projId); err != nil {
+			log.Println("Warning: ", err)
 		}
 	}
 	if done > 0 {
