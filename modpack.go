@@ -619,12 +619,14 @@ func (pack *ModPack) getSelected(db *Database) ([]*ModDetails, error) {
 	results := make([]*ModDetails, 0, len(files))
 	for _, file := range files {
 		var record ModDetails
-		if file.Exists("filename") {
-			record.filename = file.S("filename").Data().(string)
-		}
 
 		record.projectID = int(file.S("projectID").Data().(float64))
 		record.fileID = int(file.S("fileID").Data().(float64))
+
+		if fid, filename := pack.modCache.GetLastModFile(record.projectID); fid > 0 {
+			record.filename = filename
+		}
+
 		var ts int64
 		err = detailQuery.QueryRow(record.fileID, record.projectID).Scan(&record.name, &record.slug, &record.description, &ts)
 		switch {
