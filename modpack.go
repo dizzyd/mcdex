@@ -494,6 +494,8 @@ func (pack *ModPack) installModURL(url string) (string, error) {
 	filename = strings.Replace(filename, "+", "-", -1)
 	filename = strings.Replace(filename, "(", "-", -1)
 	filename = strings.Replace(filename, ")", "", -1)
+	filename = strings.Replace(filename, "[", "-", -1)
+	filename = strings.Replace(filename, "]", "", -1)
 	filename = strings.Replace(filename, "'", "", -1)
 	filename = filepath.Join(pack.modPath(), filename)
 
