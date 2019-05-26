@@ -87,13 +87,13 @@ func InstallDatabase() error {
 	tmpDb, err := sql.Open("sqlite3", tmpFileName)
 	if err != nil {
 		// TODO: Add log entry about the file being corrupt
-		return nil
+		return err
 	}
 	defer tmpDb.Close()
 
 	_, err = tmpDb.Exec("PRAGMA integrity_check;")
 	if err != nil {
-		return nil
+		return err
 	}
 
 	// Force the tmpDb to close so that (on Windows), we can ensure

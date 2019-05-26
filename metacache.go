@@ -53,6 +53,13 @@ func OpenMetaCache(pack *ModPack) (*MetaCache, error) {
 	}
 
 	mc.db = db
+
+	// Cleanup the cache; make sure that any entries are files that actually exist
+	err = mc.Cleanup(pack)
+	if err != nil {
+		return nil, err
+	}
+
 	return mc, nil
 }
 
@@ -82,6 +89,7 @@ func (mc *MetaCache) GetLastModFile(projectId int) (int, string) {
 		fmt.Printf("Error looking up file ID from meta cache for %d: %+v\n", projectId, err)
 		return -1, ""
 	}
+
 	return fileId, filename
 }
 
@@ -111,10 +119,7 @@ func (mc *MetaCache) CleanupModFile(projectId int) error {
 		return err
 	}
 
-	err = os.Remove(filepath.Join(mc.modPath, filename))
-	if err != nil {
-		return err
-	}
+	os.Remove(filepath.Join(mc.modPath, filename))
 
 	_, err = mc.db.Exec("DELETE FROM mods WHERE pid = ?", projectId)
 	return err
@@ -137,4 +142,68 @@ func (mc *MetaCache) CleanupExtFile(key string) error {
 
 	_, err = mc.db.Exec("DELETE FROM extfiles WHERE key = ?", key)
 	return err
+}
+
+func (mc *MetaCache) Cleanup(pack *ModPack) error {
+	// Build a map of the current project IDs in the pack for easy reference
+	knownProjects := make(map[int]bool)
+	packFiles, _ := pack.manifest.Path("files").Children()
+	for _, f := range packFiles {
+		// Get the project & file ID
+		projectID := int(f.Path("projectID").Data().(float64))
+		knownProjects[projectID] = true
+	}
+
+	// Copy mod cache into a map for traversal
+	cache, err := mc.listCache()
+	if err != nil {
+		return err
+	}
+
+	for filename, pid := range(cache) {
+		// If the file in the cache doesn't actually exist, remove it
+		if !fileExists(filepath.Join(mc.modPath, filename)) {
+			err = mc.CleanupModFile(pid)
+			if err != nil {
+				fmt.Printf("Failed to cleanup missing file %s: %+v\n", filename, err)
+			}
+		}
+
+		// If the project ID in the cache doesn't exist in the manifest, remove it
+		if _, ok := knownProjects[pid]; !ok {
+			err = mc.CleanupModFile(pid)
+			if err != nil {
+				fmt.Printf("Failed to cleanup missing project %d: %+v\n", pid, err)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (mc *MetaCache) listCache() (map[string]int, error) {
+	rows, err := mc.db.Query("SELECT pid, filename FROM mods")
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, nil
+	case err != nil:
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	result := make(map[string]int)
+
+	for rows.Next() {
+		var projectId int
+		var filename string
+		err := rows.Scan(&projectId, &filename)
+		if err != nil {
+			return nil, err
+		}
+
+		result[filename] = projectId
+	}
+
+	return result, nil
 }
