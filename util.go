@@ -47,7 +47,7 @@ func NewHttpClient(followRedirects bool) http.Client {
 		Dial: func(network string, address string) (net.Conn, error) {
 			separator := strings.LastIndex(address, ":")
 			ip, _ := resolver.FetchOneString(address[:separator])
-			return net.Dial("tcp", ip+address[separator:])
+			return net.Dial("tcp", fmt.Sprintf("[%s]%s", ip, address[separator:]))
 		},
 	}
 
