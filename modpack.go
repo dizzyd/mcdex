@@ -132,13 +132,13 @@ func (pack *ModPack) download(url string) error {
 
 	fmt.Printf("Starting download of modpack: %s\n", url)
 
-	// For the moment, we only support modpacks from Curseforge and we must have the URL
-	// end in /download; check and enforce these conditions
-	if !strings.HasPrefix(url, "https://minecraft.curseforge.com/projects/") && !strings.HasPrefix(url, "https://www.feed-the-beast.com") {
+	// For the moment, we only support modpacks from Curseforge or FTB; check and enforce these conditions
+	isFTB := strings.HasPrefix(url, "https://www.feed-the-beast.com/")
+	if !strings.HasPrefix(url, "https://www.curseforge.com/minecraft/modpacks/") && !isFTB {
 		return fmt.Errorf("Invalid modpack URL; we only support Curseforge & feed-the-beast.com right now")
 	}
 
-	if !strings.HasSuffix(url, "/download") {
+	if isFTB && !strings.HasSuffix(url, "/download") {
 		url += "/download"
 	}
 
@@ -456,13 +456,13 @@ func (pack *ModPack) loadManifest() error {
 
 func (pack *ModPack) installMod(projectID, fileID int) (string, error) {
 	// First, resolve the project ID
-	baseURL, err := getRedirectURL(fmt.Sprintf("https://minecraft.curseforge.com/projects/%d?cookieTest=1", projectID))
+	baseURL, err := getRedirectURL(fmt.Sprintf("https://minecraft.curseforge.com/projects/%d", projectID))
 	if err != nil {
 		return "", fmt.Errorf("failed to resolve project %d: %+v", projectID, err)
 	}
 
 	// Append the file ID to the baseURL
-	finalURL := fmt.Sprintf("%s/files/%d/download", baseURL, fileID)
+	finalURL := fmt.Sprintf("%s/download/%d/file", baseURL, fileID)
 	return pack.installModURL(finalURL)
 }
 
@@ -486,6 +486,10 @@ func (pack *ModPack) installModURL(url string) (string, error) {
 	attachmentID := resp.Header.Get("Content-Disposition")
 	if strings.HasPrefix(attachmentID, "attachment; filename=") {
 		filename = strings.TrimPrefix(attachmentID, "attachment; filename=")
+	}
+
+	if !strings.HasSuffix(filename, ".jar") {
+		return "", fmt.Errorf("%s does not link to a valid mod file", url)
 	}
 
 	// Cleanup the filename
