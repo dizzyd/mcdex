@@ -496,7 +496,7 @@ func cmdServerInstall() error {
 }
 
 func cmdDBUpdate() error {
-	err := InstallDatabase()
+	err := InstallDatabase(false)
 	if err != nil {
 		return err
 	}

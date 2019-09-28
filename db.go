@@ -41,11 +41,12 @@ type Database struct {
 func OpenDatabase() (*Database, error) {
 	db := new(Database)
 
-	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
-	if !fileExists(db.sqlDbPath) {
-		return nil, fmt.Errorf("No database available; use db.update command first")
+	err := InstallDatabase(true)
+	if err != nil {
+		return nil, fmt.Errorf("Database not available; try using db.update command")
 	}
 
+	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
 	sqlDb, err := sql.Open("sqlite3", db.sqlDbPath)
 	if err != nil {
 		return nil, err
@@ -61,7 +62,11 @@ func OpenDatabase() (*Database, error) {
 	return db, nil
 }
 
-func InstallDatabase() error {
+func InstallDatabase(skipIfExists bool) error {
+	if skipIfExists && fileExists(filepath.Join(env().McdexDir, "mcdex.dat")) {
+		return nil
+	}
+
 	// Get the latest version
 	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v4")
 	if err != nil {
