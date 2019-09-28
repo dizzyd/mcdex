@@ -21,6 +21,7 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -31,8 +32,6 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"net/url"
 
 	"github.com/Jeffail/gabs"
 	"github.com/viki-org/dnscache"
@@ -55,6 +54,8 @@ func NewHttpClient(followRedirects bool) http.Client {
 			}
 			return net.Dial("tcp", ipWithPort)
 		},
+		// Disable HTTP/2.0
+		TLSNextProto:           make(map[string]func(string, *tls.Conn) http.RoundTripper),
 	}
 
 	if !followRedirects {
@@ -65,25 +66,13 @@ func NewHttpClient(followRedirects bool) http.Client {
 }
 
 func HttpGet(url string) (*http.Response, error) {
-	return getterClient.Get(url)
-}
-
-func getRedirectURL(url string) (*url.URL, error) {
-	resp, err := redirectClient.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP error on %s: %+v", url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 301 || resp.StatusCode == 302 {
-		u, err := resp.Location()
-		if err != nil {
-			return nil, fmt.Errorf("invalid location url: %+v", err)
-		}
-		return u, nil
-	}
-
-	return nil, nil
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Add("User-Agent", "Mozilla/5.0")
+	req.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Add("Accept-Encoding",  "gzip, deflate, br")
+	req.Header.Add("Accept-Language","en-US,en;q=0.5")
+	req.Header.Add("Cache-Control", "max-age=0")
+	return getterClient.Do(req)
 }
 
 func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {
