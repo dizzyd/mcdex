@@ -13,3 +13,5 @@ require (
 	golang.org/x/text v0.3.0
 	gopkg.in/sourcemap.v1 v1.0.5
 )
+
+go 1.13
