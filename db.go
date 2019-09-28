@@ -271,6 +271,18 @@ func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
 	return modID, nil
 }
 
+func (db *Database) findSlugByProject(id int) (string, error) {
+	var slug string
+	err := db.sqlDb.QueryRow("select slug from projects where projectid = ?", id).Scan(&slug)
+	switch {
+	case err == sql.ErrNoRows:
+		return "", fmt.Errorf("no project found %d", id)
+	case err != nil:
+		return slug, err
+	}
+	return slug, nil
+}
+
 func (db *Database) findModBySlug(slug string) (int, error) {
 	return db.findProjectBySlug(slug, 0)
 }
