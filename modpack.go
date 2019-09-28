@@ -39,6 +39,7 @@ type ModPack struct {
 	modDir   string
 	manifest *gabs.Container
 	modCache *MetaCache
+	db       *Database
 }
 
 func (pack *ModPack) gamePath() string { return filepath.Join(pack.rootPath, pack.gameDir) }
@@ -53,6 +54,13 @@ func (pack *ModPack) fullName() string {
 
 func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack, error) {
 	pack := new(ModPack)
+
+	// Open a copy of the database for modpack related ops
+	db, err := OpenDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database for modpack: %+v", err)
+	}
+	pack.db = db
 
 	// Initialize path & name
 	if filepath.IsAbs(dir) {
@@ -83,7 +91,7 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 	}
 
 	// Try to load the manifest; only raise an error if we require it to be loaded
-	err := pack.loadManifest()
+	err = pack.loadManifest()
 	if requireManifest && err != nil {
 		return nil, err
 	}
@@ -455,14 +463,14 @@ func (pack *ModPack) loadManifest() error {
 }
 
 func (pack *ModPack) installMod(projectID, fileID int) (string, error) {
-	// First, resolve the project ID
-	baseURL, err := getRedirectURL(fmt.Sprintf("https://minecraft.curseforge.com/projects/%d", projectID))
+	// First, resolve the project ID into a slug
+	slug, err := pack.db.findSlugByProject(projectID)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve project %d: %+v", projectID, err)
+		return "", fmt.Errorf("failed to find slug for project %d: %+v", projectID, err)
 	}
 
 	// Append the file ID to the baseURL
-	finalURL := fmt.Sprintf("%s/download/%d/file", baseURL, fileID)
+	finalURL := fmt.Sprintf("https://curseforge.com/minecraft/mc-mods/%s/download/%d/file", slug, fileID)
 	return pack.installModURL(finalURL)
 }
 
