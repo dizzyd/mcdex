@@ -21,8 +21,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
-	"crypto/tls"
 	"fmt"
+	"golang.org/x/net/http2"
 	"io"
 	"io/ioutil"
 	"net"
@@ -37,41 +37,42 @@ import (
 	"github.com/viki-org/dnscache"
 )
 
+const connTimeout = time.Duration(5) * time.Second
+
 var resolver = dnscache.New(time.Minute * 15)
 var getterClient = NewHttpClient(true)
 var redirectClient = NewHttpClient(false)
 
 func NewHttpClient(followRedirects bool) http.Client {
-	t := &http.Transport{
+	t := http.Transport{
+		MaxIdleConnsPerHost: 10,
+		ResponseHeaderTimeout: time.Duration(10 * time.Second),
+		ExpectContinueTimeout: time.Duration(10 * time.Second),
 		Dial: func(network string, address string) (net.Conn, error) {
 			separator := strings.LastIndex(address, ":")
 			ip, _ := resolver.FetchOneString(address[:separator])
-			var ipWithPort string
-			if (strings.Contains(ip, ":")) {
-				ipWithPort = fmt.Sprintf("[%s]%s", ip, address[separator:])
-			} else {
-				ipWithPort = ip + address[separator:]
+			conn, err := net.DialTimeout("tcp", ip+address[separator:], connTimeout)
+			if err != nil {
+				return nil, err
 			}
-			return net.Dial("tcp", ipWithPort)
+			return conn, nil
 		},
-		// Disable HTTP/2.0
-		TLSNextProto:           make(map[string]func(string, *tls.Conn) http.RoundTripper),
+	}
+	err := http2.ConfigureTransport(&t)
+	if err != nil {
+		fmt.Printf("Err configuring http2: %+v\n", err)
 	}
 
 	if !followRedirects {
-		return http.Client{Transport: t, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+		return http.Client{Transport: &t, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
 	}
-	return http.Client{Transport: t}
+	return http.Client{Transport: &t}
 
 }
 
 func HttpGet(url string) (*http.Response, error) {
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Add("User-Agent", "Mozilla/5.0")
-	req.Header.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Add("Accept-Encoding",  "gzip, deflate, br")
-	req.Header.Add("Accept-Language","en-US,en;q=0.5")
-	req.Header.Add("Cache-Control", "max-age=0")
+	req.Header.Add("User-Agent", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Brave Chrome/79.0.3945.88 Safari/537.36")
 	return getterClient.Do(req)
 }
 

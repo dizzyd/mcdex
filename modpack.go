@@ -469,9 +469,15 @@ func (pack *ModPack) installMod(projectID, fileID int) (string, error) {
 		return "", fmt.Errorf("failed to find slug for project %d: %+v", projectID, err)
 	}
 
-	// Append the file ID to the baseURL
-	finalURL := fmt.Sprintf("https://curseforge.com/minecraft/mc-mods/%s/download/%d/file", slug, fileID)
-	return pack.installModURL(finalURL)
+	// Now, retrieve the JSON descriptor for this file so we can get the CDN url
+	descriptorUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d/file/%d", projectID, fileID)
+	descriptor, err := getJSONFromURL(descriptorUrl)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve descriptor for %s: %+v", slug, err)
+	}
+
+	finalUrl := descriptor.Path("downloadUrl").Data().(string)
+	return pack.installModURL(finalUrl)
 }
 
 func (pack *ModPack) installModURL(url string) (string, error) {
