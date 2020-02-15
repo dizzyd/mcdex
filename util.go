@@ -50,8 +50,13 @@ func NewHttpClient(followRedirects bool) http.Client {
 		ExpectContinueTimeout: time.Duration(10 * time.Second),
 		Dial: func(network string, address string) (net.Conn, error) {
 			separator := strings.LastIndex(address, ":")
-			ip, _ := resolver.FetchOneString(address[:separator])
-			conn, err := net.DialTimeout("tcp", ip+address[separator:], connTimeout)
+			ip, _ := resolver.FetchOne(address[:separator])
+			ipStr := ip.String()
+			if (ip.To4() == nil) {
+				// IPv6 address; need to wrap it in brackets
+				ipStr = fmt.Sprintf("[%s]", ipStr)
+			}
+			conn, err := net.DialTimeout("tcp", ipStr + address[separator:], connTimeout)
 			if err != nil {
 				return nil, err
 			}
