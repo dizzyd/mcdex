@@ -17,9 +17,35 @@
 
 package main
 
+import "time"
+
 type ModFile struct {
 	fileID  int
 	modID   int
 	modName string
 	modDesc string
+	slug    string
+}
+
+type ManifestFileEntry struct {
+	idx  int
+	file string
+
+	fileId int
+	projId int
+	name   string
+}
+
+func (m *ManifestFileEntry) String() string {
+	return m.name
+}
+
+type ModDetails struct {
+	fileID      int
+	projectID   int
+	name        string
+	slug        string
+	description string
+	filename    string
+	timestamp   time.Time
 }

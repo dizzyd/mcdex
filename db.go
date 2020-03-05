@@ -21,15 +21,19 @@ import (
 	"compress/bzip2"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-
 	"regexp"
+	"strconv"
+	"strings"
 
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"mcdex/algo"
 )
 
 type Database struct {
@@ -37,6 +41,14 @@ type Database struct {
 	sqlDbPath string
 	version   string
 }
+
+type DepType int
+
+const (
+	Required = 1
+	Optional = 2
+	Embedded = 3
+)
 
 func OpenDatabase() (*Database, error) {
 	db := new(Database)
@@ -236,8 +248,8 @@ func (db *Database) getLatestFileTstamp() (int, error) {
 
 func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {
 	// First, look up the modid for the given name
-	var name, desc string
-	err := db.sqlDb.QueryRow("select name, description from projects where type = 0 and projectid = ?", modID).Scan(&name, &desc)
+	var name, slug, desc string
+	err := db.sqlDb.QueryRow("select name, slug, description from projects where type = 0 and projectid = ?", modID).Scan(&name, &slug, &desc)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, fmt.Errorf("No mod found %d", modID)
@@ -256,7 +268,7 @@ func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) 
 		return nil, err
 	}
 
-	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+	return &ModFile{fileID: fileID, modID: modID, modName: name, slug: slug, modDesc: desc}, nil
 }
 
 func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
@@ -302,7 +314,7 @@ func (db *Database) findModByName(name string) (int, error) {
 func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, error) {
 	// Try to match the file ID
 	if fileID > 0 {
-		err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and fileid = ? and version = ?", modID, fileID, mcversion).Scan(&fileID)
+		err := db.sqlDb.QueryRow("select projectid from files where fileid = ? and version = ?", fileID, mcversion).Scan(&modID)
 		if err != nil {
 			return nil, fmt.Errorf("No matching file ID for %s version", mcversion)
 		}
@@ -315,13 +327,13 @@ func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, 
 	}
 
 	// We matched some file; pull the name and description for the mod
-	var name, desc string
-	err := db.sqlDb.QueryRow("select slug, description from projects where projectid = ?", modID).Scan(&name, &desc)
+	var name, slug, desc string
+	err := db.sqlDb.QueryRow("select name, slug, description from projects where projectid = ?", modID).Scan(&name, &slug, &desc)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to retrieve name, description for mod %d: %+v", modID, err)
 	}
 
-	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+	return &ModFile{fileID: fileID, modID: modID, modName: name, slug: slug, modDesc: desc}, nil
 }
 
 func (db *Database) getDeps(fileID int) ([]int, error) {
@@ -368,6 +380,78 @@ func (db *Database) getLatestPackURL(slug string) (string, error) {
 	}
 
 	// Construct a URL using the slug and file ID
-	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil;
+	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil
+}
 
+func (db *Database) buildDepGraph(m *ModPack) (algo.Graph, error) {
+
+	var fileIds map[int]*ManifestFileEntry
+	var fileIdsString strings.Builder
+	g := algo.MakeGraph()
+
+	// Load all files from manifest
+	{
+		nameQuery, err := db.sqlDb.Prepare("SELECT DISTINCT name FROM files f, projects p WHERE f.fileid = ? AND f.projectid = ? AND p.projectid = f.projectid")
+		if err != nil {
+			return nil, err
+		}
+		defer nameQuery.Close()
+
+		files, _ := m.manifest.S("files").Children()
+		fileIds = make(map[int]*ManifestFileEntry, len(files))
+		for i, file := range files {
+			record := ManifestFileEntry{idx: i}
+
+			record.projId = int(file.S("projectID").Data().(float64))
+			record.fileId = int(file.S("fileID").Data().(float64))
+
+			if fid, filename := m.modCache.GetLastModFile(record.projId); fid > 0 {
+				record.file = filename
+			}
+
+			err = nameQuery.QueryRow(record.fileId, record.projId).Scan(&record.name)
+			switch {
+			case err == sql.ErrNoRows:
+				log.Printf("No mod found in database with project id %d and file id %d - File: %q\n\tDependency resolution may be incomplete!", record.projId, record.fileId, record.file)
+			case err != nil:
+				return nil, err
+			}
+
+			fileIds[record.fileId] = &record
+			g.AddNode(&record)
+
+			fileIdsString.WriteString(strconv.Itoa(record.fileId))
+			fileIdsString.WriteByte(',')
+		}
+		// Simple hack to deal with trailing comma or empty
+		fileIdsString.WriteByte('0')
+	}
+
+	// Load dependencies and add to graph
+	{
+		rows, err := db.sqlDb.Query(fmt.Sprintf("SELECT DISTINCT d.fileid, f.fileid, level FROM deps d, files f WHERE level <> 3 AND f.projectid = d.projectid AND d.fileid IN (%[1]s) AND f.fileid IN (%[1]s)", fileIdsString.String()))
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var fileid, depid int
+			var depType DepType
+			if err = rows.Scan(&fileid, &depid, &depType); err != nil {
+				return nil, err
+			}
+
+			node := g[fileIds[fileid]]
+			dep := fileIds[depid]
+			switch depType {
+			case Required:
+				node.AddDependencies(dep)
+			case Optional:
+				node.AddOptionals(dep)
+			}
+		}
+	}
+
+	return g, nil
 }

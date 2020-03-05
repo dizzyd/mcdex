@@ -19,12 +19,14 @@ package main
 
 import (
 	"archive/zip"
+	"database/sql"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"io/ioutil"
+	"time"
 
 	"github.com/Jeffail/gabs"
 )
@@ -370,7 +372,7 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 	modInfo["projectID"] = modFile.modID
 	modInfo["fileID"] = modFile.fileID
 	modInfo["required"] = true
-	modInfo["desc"] = modFile.modName
+	modInfo["desc"] = modFile.slug
 
 	if clientOnly {
 		modInfo["clientOnly"] = true
@@ -613,4 +615,50 @@ func (pack *ModPack) installServer() error {
 
 func (pack *ModPack) generateMMCConfig() error {
 	return generateMMCConfig(pack)
+}
+
+func (pack *ModPack) lookupFileId(projectId int) (int, error) {
+	files, _ := pack.manifest.S("files").Children()
+	for _, file := range files {
+		if projectId == int(file.S("projectID").Data().(float64)) {
+			return int(file.S("fileID").Data().(float64)), nil
+		}
+	}
+
+	return -1, fmt.Errorf("project %d not found in manifest", projectId)
+}
+
+func (pack *ModPack) getSelected(db *Database) ([]*ModDetails, error) {
+	detailQuery, err := db.sqlDb.Prepare("SELECT DISTINCT name, slug, description, f.tstamp FROM files f, projects p WHERE f.fileid = ? AND f.projectid = ? AND p.projectid = f.projectid")
+	if err != nil {
+		return nil, err
+	}
+	defer detailQuery.Close()
+
+	files, _ := pack.manifest.S("files").Children()
+	results := make([]*ModDetails, 0, len(files))
+	for _, file := range files {
+		var record ModDetails
+
+		record.projectID = int(file.S("projectID").Data().(float64))
+		record.fileID = int(file.S("fileID").Data().(float64))
+
+		if fid, filename := pack.modCache.GetLastModFile(record.projectID); fid > 0 {
+			record.filename = filename
+		}
+
+		var ts int64
+		err = detailQuery.QueryRow(record.fileID, record.projectID).Scan(&record.name, &record.slug, &record.description, &ts)
+		switch {
+		case err == sql.ErrNoRows:
+			log.Printf("No mod found in database with project id %d and file id %d - File: %q", record.projectID, record.fileID, record.filename)
+		case err != nil:
+			return nil, err
+		}
+		record.timestamp = time.Unix(ts, 0)
+
+		results = append(results, &record)
+	}
+
+	return results, nil
 }
