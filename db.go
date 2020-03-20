@@ -368,6 +368,6 @@ func (db *Database) getLatestPackURL(slug string) (string, error) {
 	}
 
 	// Construct a URL using the slug and file ID
-	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil;
+	return fmt.Sprintf("https://www.curseforge.com/minecraft/modpacks/%s/download/%d/file", slug, fileID), nil;
 
 }
