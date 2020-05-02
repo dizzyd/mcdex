@@ -31,6 +31,12 @@ import (
 
 const NamePlaceholder = "*"
 
+var VALID_URL_PREFIXES = []string{
+	"https://www.feed-the-beast.com/download",
+	"https://www.curseforge.com/minecraft/modpacks/",
+	"https://minecraft.curseforge.com/",
+}
+
 // ModPack is a directory, manifest and other components that represent a pack
 type ModPack struct {
 	name     string
@@ -141,13 +147,8 @@ func (pack *ModPack) download(url string) error {
 	fmt.Printf("Starting download of modpack: %s\n", url)
 
 	// For the moment, we only support modpacks from Curseforge or FTB; check and enforce these conditions
-	isFTB := strings.HasPrefix(url, "https://www.feed-the-beast.com/")
-	if !strings.HasPrefix(url, "https://www.curseforge.com/minecraft/modpacks/") && !isFTB {
+	if !hasAnyPrefix(url, VALID_URL_PREFIXES...) {
 		return fmt.Errorf("Invalid modpack URL; we only support Curseforge & feed-the-beast.com right now")
-	}
-
-	if isFTB && !strings.HasSuffix(url, "/download") {
-		url += "/download"
 	}
 
 	// Start the download

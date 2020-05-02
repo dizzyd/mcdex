@@ -261,3 +261,13 @@ func intValue(c *gabs.Container, path string) (int, error) {
 		return 0, fmt.Errorf("Invalid type for %s: %+v", path, data)
 	}
 }
+
+func hasAnyPrefix(url string, prefixes ...string) bool {
+	for _, p := range(prefixes) {
+		if strings.HasPrefix(url, p) {
+			return true
+		}
+	}
+
+	return false
+}
