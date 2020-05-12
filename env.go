@@ -68,6 +68,10 @@ func unpack200Cmd() string {
 	return filepath.Join(envData.JavaDir, "bin", "unpack200"+_executableExt())
 }
 
+func javaCmd() string {
+	return filepath.Join(envData.JavaDir, "bin", "java" + _executableExt())
+}
+
 func vlog(f string, args ...interface{}) {
 	if ARG_VERBOSE {
 		fmt.Printf("V: "+f, args...)

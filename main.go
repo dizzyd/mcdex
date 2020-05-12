@@ -207,7 +207,7 @@ func cmdPackInstall() error {
 	}
 
 	// Only require a manifest if we're not installing from a URL
-	requireManifest := (url == "")
+	requireManifest := url == ""
 
 	cp, err := NewModPack(dir, requireManifest, ARG_MMC)
 	if err != nil {

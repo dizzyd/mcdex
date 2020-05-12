@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -52,7 +53,7 @@ func NewHttpClient(followRedirects bool) http.Client {
 			separator := strings.LastIndex(address, ":")
 			ip, _ := resolver.FetchOne(address[:separator])
 			ipStr := ip.String()
-			if (ip.To4() == nil) {
+			if ip.To4() == nil {
 				// IPv6 address; need to wrap it in brackets
 				ipStr = fmt.Sprintf("[%s]", ipStr)
 			}
@@ -81,6 +82,23 @@ func HttpGet(url string) (*http.Response, error) {
 	return getterClient.Do(req)
 }
 
+func downloadHttpFile(url string, targetFile string) error {
+	resp, err := HttpGet(url)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve %s: %+v", url, err)
+	}
+	defer resp.Body.Close()
+
+	// Make sure all directories exist for the given filename
+	err = os.MkdirAll(path.Dir(targetFile), 0700)
+	if err != nil {
+		return fmt.Errorf("failed to create directories for %s: %+v", targetFile, err)
+	}
+
+	// Copy the stream into the filename
+	return writeStream(targetFile, resp.Body)
+}
+
 func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {
 	for _, f := range z.File {
 		if f.Name == name {
@@ -98,24 +116,6 @@ func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {
 	}
 
 	return nil, fmt.Errorf("failed to find %s", name)
-}
-
-func zipEntryToJSON(name string, f *zip.File) (*gabs.Container, error) {
-	if f == nil {
-		return nil, fmt.Errorf("failed to find %s", name)
-	}
-
-	freader, err := f.Open()
-	if err != nil {
-		return nil, err
-	}
-
-	json, err := gabs.ParseJSONBuffer(freader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse %s JSON: %+v", name, err)
-	}
-
-	return json, nil
 }
 
 func writeStream(filename string, data io.Reader) error {
@@ -190,6 +190,12 @@ func readStringFile(filename string) (string, error) {
 }
 
 func writeStringFile(filename, data string) error {
+	// Ensure all the necessary directories exist
+	err := os.MkdirAll(path.Dir(filename), 0700)
+	if err != nil {
+		return err
+	}
+
 	return ioutil.WriteFile(filename, []byte(data), 0644)
 }
 
@@ -263,11 +269,37 @@ func intValue(c *gabs.Container, path string) (int, error) {
 }
 
 func hasAnyPrefix(url string, prefixes ...string) bool {
-	for _, p := range(prefixes) {
+	for _, p := range prefixes {
 		if strings.HasPrefix(url, p) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func getJavaMainClass(jarfile string) (string, error) {
+	zr, err := zip.OpenReader(jarfile)
+	if err != nil {
+		return "", err
+	}
+	defer zr.Close()
+
+	for _, f := range zr.File {
+		if f.Name == "META-INF/MANIFEST.MF" {
+			manifest, err := f.Open()
+			if err != nil {
+				return "", err
+			}
+
+			scanner := bufio.NewScanner(manifest)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.HasPrefix(line, "Main-Class:") {
+					return strings.TrimSpace(strings.TrimPrefix(line, "Main-Class:")), nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("main class not found")
 }

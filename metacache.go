@@ -160,7 +160,7 @@ func (mc *MetaCache) Cleanup(pack *ModPack) error {
 		return err
 	}
 
-	for filename, pid := range(cache) {
+	for filename, pid := range cache {
 		// If the file in the cache doesn't actually exist, remove it
 		if !fileExists(filepath.Join(mc.modPath, filename)) {
 			err = mc.CleanupModFile(pid)
