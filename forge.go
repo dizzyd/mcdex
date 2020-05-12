@@ -88,7 +88,7 @@ func installClientForge(minecraftVsn, forgeVsn string) (string, error) {
 func installForge(context forgeContext) (string, error) {
 	// If this version of forge is already installed, exit early
 	if context.isForgeInstalled() {
-		fmt.Printf("Forge %s already available.\n", context.forgeVsn)
+		logAction("Forge %s already available.\n", context.forgeVsn)
 		return context.forgeId(), nil
 	}
 
@@ -109,7 +109,7 @@ func installForge(context forgeContext) (string, error) {
 	}
 
 	// Construct the download URL
-	fmt.Printf("Downloading Forge %s\n", context.forgeVsn)
+	logAction("Downloading Forge %s\n", context.forgeVsn)
 
 	// Download the Forge installer (into memory)
 	resp, err := HttpGet(forgeURL)
@@ -168,6 +168,8 @@ func installForge(context forgeContext) (string, error) {
 		return "", err
 	}
 
+	logSection("Installed forge artifacts\n")
+
 	// Install libraries for install_profile.json
 	err = installForgeLibraries(context.installJson, &context)
 	if err != nil {
@@ -182,11 +184,15 @@ func installForge(context forgeContext) (string, error) {
 		return "", err
 	}
 
+	logSection("Installed all libraries\n")
+
 	// Make sure appropriate minecraft JAR is available
 	minecraftJar, err := installMinecraftJar(context.minecraftVsn, context.isClient, context.baseDir)
 	if err != nil {
 		return "", fmt.Errorf("failed to install minecraft jar %s: %+v", context.minecraftVsn, err)
 	}
+
+	logSection("Installed Minecraft %s jar\n", context.minecraftVsn)
 
 	// Run any processors we find in install_profile.json
 	err = runForgeProcessors(&context, minecraftJar)
@@ -194,6 +200,8 @@ func installForge(context forgeContext) (string, error) {
 		fmt.Printf("Failed to run processores from install_profile.json: %+v\n", err)
 		return "", err
 	}
+
+	logSection("Executed forge processors\n")
 
 	return context.forgeId(), nil
 }
@@ -235,7 +243,7 @@ func installForgeArtifacts(context *forgeContext) error {
 		targetFile = path.Join(context.baseDir, forgeFilename)
 	}
 
-	fmt.Printf("Installing %s: %s\n", targetFile, sourceFile)
+	logAction("Installing %s...\n", artifactId)
 	_, err := context.installArchive.writeFile(sourceFile, targetFile)
 	if err != nil {
 		return fmt.Errorf("failed to write %s: %+v", targetFile, err)
@@ -271,7 +279,7 @@ func installForgeLibrary(library *gabs.Container, context *forgeContext) error {
 			sourceFile := path.Join("maven", filename)
 			targetFile := path.Join(context.artifactDir(), filename)
 
-			fmt.Printf("Installing %s: %s\n", name, filename)
+			logAction("Installing %s...\n", name)
 			_, err := context.installArchive.writeFile(sourceFile, targetFile)
 			if err != nil {
 				return fmt.Errorf("failed to write %s: %+v", filename, err)
@@ -284,7 +292,6 @@ func installForgeLibrary(library *gabs.Container, context *forgeContext) error {
 		var isServerLib = getFlag(library, "serverreq")
 
 		if !isClientLib && !isServerLib {
-			fmt.Printf("Skipping %s - not a client or server requirement\n", name)
 			return nil
 		}
 
@@ -297,7 +304,7 @@ func installForgeLibrary(library *gabs.Container, context *forgeContext) error {
 		}
 	}
 
-	fmt.Printf("Installing %s: %s\n", name, url)
+	logAction("Installing %s...\n", name)
 
 	// Convert name from maven format to path
 	artifactName := artifactToPath(name)
@@ -383,6 +390,7 @@ func downloadXzPack(url, filename string) error {
 	err = writeStream(filepath.Join(dir, "tmp.pack"), bytes.NewReader(packData[0:packSz-sigLen]))
 	if err != nil {
 		fmt.Printf("failed to write %s: %+v", dir, err)
+		return err
 	}
 
 	// Invoke unpack200 on tmp.pack and output to the appropriate JAR name
@@ -449,7 +457,7 @@ func invokeUnpack200(libDir, libName string) error {
 }
 
 func invokeProcessor(name string, args []string) error {
-	fmt.Printf("Running processor %s...\n", name)
+	logAction("Running processor %s...\n", name)
 	cmd := exec.Command(javaCmd(), args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -463,7 +471,7 @@ func runForgeProcessors(context *forgeContext, minecraftJar string) error {
 	processors, _ := context.installJson.Path("processors").Children()
 	if processors == nil {
 		// Nothing to do, bail
-		fmt.Printf("Skipping Forge processors...\n")
+		logAction("Skipping Forge processors...\n")
 		return nil
 	}
 
@@ -475,10 +483,6 @@ func runForgeProcessors(context *forgeContext, minecraftJar string) error {
 
 	// The data section also requires a key pointing to the installed Minecraft JAR
 	data["MINECRAFT_JAR"] = minecraftJar
-
-	for k, v := range data {
-		fmt.Printf("Data %s -> %s\n", k, v)
-	}
 
 	for _, p := range processors {
 		var args []string
@@ -492,9 +496,6 @@ func runForgeProcessors(context *forgeContext, minecraftJar string) error {
 		var classpathJars []string
 		for _, item := range classpathItems {
 			entry := path.Join(context.artifactDir(), artifactToPath(item.Data().(string)))
-			if !fileExists(entry) {
-				fmt.Printf("Missing classpath entry: %s\n", entry)
-			}
 			classpathJars = append(classpathJars, entry)
 		}
 

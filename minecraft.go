@@ -53,7 +53,7 @@ func installMinecraftJar(version string, isClient bool, baseDir string) (string,
 	url := manifest.Path("downloads." + key + ".url").Data().(string)
 
 	// Download the version into appropriate place
-	fmt.Printf("Downloading %s: %s\n", path.Base(filename), url)
+	logAction("Downloading %s: %s\n", path.Base(filename), url)
 	err = downloadHttpFile(url, filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to retrieve URL for %s: %+v", version, err)
