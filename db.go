@@ -234,29 +234,18 @@ func (db *Database) getLatestFileTstamp() (int, error) {
 	return tstamp, err
 }
 
-func (db *Database) getLatestModFile(modID int, mcvsn string) (*ModFile, error) {
-	// First, look up the modid for the given name
-	var name, desc string
-	err := db.sqlDb.QueryRow("select name, description from projects where type = 0 and projectid = ?", modID).Scan(&name, &desc)
-	switch {
-	case err == sql.ErrNoRows:
-		return nil, fmt.Errorf("No mod found %d", modID)
-	case err != nil:
-		return nil, err
-	}
-
+func (db *Database) getLatestFileID(projectID int, mcvsn string) (int, error) {
 	// Now find the latest release or beta version
 	var fileID int
-	err = db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
-		modID, mcvsn).Scan(&fileID)
+	err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
+		projectID, mcvsn).Scan(&fileID)
 	switch {
 	case err == sql.ErrNoRows:
-		return nil, fmt.Errorf("No file found for %s on Minecraft %s", name, mcvsn)
+		return -1, fmt.Errorf("No file found for %s on Minecraft %s", projectID, mcvsn)
 	case err != nil:
-		return nil, err
+		return -1, err
 	}
-
-	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+	return fileID, nil
 }
 
 func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
@@ -299,51 +288,51 @@ func (db *Database) findModByName(name string) (int, error) {
 	return modID, nil
 }
 
-func (db *Database) findModFile(modID, fileID int, mcversion string) (*ModFile, error) {
-	// Try to match the file ID
-	if fileID > 0 {
-		err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and fileid = ? and version = ?", modID, fileID, mcversion).Scan(&fileID)
-		if err != nil {
-			return nil, fmt.Errorf("No matching file ID for %s version", mcversion)
-		}
-	} else {
-		err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
-			modID, mcversion).Scan(&fileID)
-		if err != nil {
-			return nil, fmt.Errorf("No recent file for mod %d / %s version", modID, mcversion)
-		}
+func (db *Database) findModFile(projectID int, mcversion string) (*CurseForgeModFile, error) {
+	var fileID int
+	err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
+		projectID, mcversion).Scan(&fileID)
+	if err != nil {
+		return nil, fmt.Errorf("no recent file for project %d / %s version", projectID, mcversion)
 	}
 
 	// We matched some file; pull the name and description for the mod
 	var name, desc string
-	err := db.sqlDb.QueryRow("select slug, description from projects where projectid = ?", modID).Scan(&name, &desc)
+	err = db.sqlDb.QueryRow("select slug, description from projects where projectid = ?", projectID).Scan(&name, &desc)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to retrieve name, description for mod %d: %+v", modID, err)
+		return nil, fmt.Errorf("failed to retrieve name, description for project %d: %+v", projectID, err)
 	}
 
-	return &ModFile{fileID: fileID, modID: modID, modName: name, modDesc: desc}, nil
+	return &CurseForgeModFile{fileID: fileID, projectID: projectID, name: name, desc: desc}, nil
 }
 
-func (db *Database) getDeps(fileID int) ([]int, error) {
-	var result []int
+func (db *Database) getDeps(fileID int) ([]string, error) {
+	var result []string
 	rows, err := db.sqlDb.Query("SELECT projectid, level FROM deps WHERE fileid = ? and level == 1", fileID)
 
 	switch {
 	case err == sql.ErrNoRows:
-		return []int{}, nil
+		return []string{}, nil
 	case err != nil:
-		return []int{}, fmt.Errorf("Failed to query deps for %d: %+v", fileID, err)
+		return []string{}, fmt.Errorf("Failed to query deps for %d: %+v", fileID, err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		var modID, level int
-		err = rows.Scan(&modID, &level)
+		var projectID, level int
+		err = rows.Scan(&projectID, &level)
 		if err != nil {
-			return []int{}, fmt.Errorf("Failed to query dep rows for %d: %+v", fileID, err)
+			return []string{}, fmt.Errorf("Failed to query dep rows for %d: %+v", fileID, err)
 		}
 
-		result = append(result, modID)
+		// Resolve the project ID to a slug
+		var slug string
+		err = db.sqlDb.QueryRow("select slug from projects where projectid = ?", projectID).Scan(&slug)
+		if err != nil {
+			return []string{}, fmt.Errorf("failed to resolve dep project %d to a slug", projectID)
+		}
+
+		result = append(result, slug)
 	}
 
 	return result, nil

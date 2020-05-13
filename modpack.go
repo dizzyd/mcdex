@@ -48,6 +48,17 @@ type ModPack struct {
 	db       *Database
 }
 
+type ModPackFile interface {
+	install(pack *ModPack) error
+	update(pack *ModPack) (bool, error)
+
+	getName() string
+	isClientOnly() bool
+
+	equalsJson(modJson *gabs.Container) bool
+	toJson() map[string]interface{}
+}
+
 func (pack *ModPack) gamePath() string { return filepath.Join(pack.rootPath, pack.gameDir) }
 func (pack *ModPack) modPath() string  { return filepath.Join(pack.gamePath(), pack.modDir) }
 func (pack *ModPack) fullName() string {
@@ -289,100 +300,43 @@ func (pack *ModPack) createLauncherProfile() error {
 	return nil
 }
 
-func (pack *ModPack) installMods(isClient bool, ignoreFailedDownloads bool) error {
+func (pack *ModPack) installMods(isClient bool) error {
 	// Make sure mods directory already exists
 	os.MkdirAll(pack.modPath(), 0700)
 
-	// Using manifest, download each mod file into pack directory from Curseforge
+	// Using manifest, download each mod file into pack directory
 	files, _ := pack.manifest.Path("files").Children()
 	for _, f := range files {
-		clientOnlyMod, ok := f.S("clientOnly").Data().(bool)
-		if ok && clientOnlyMod && !isClient {
-			fmt.Printf("Skipping client-only mod %s\n", f.Path("desc").Data().(string))
-			continue
-		}
-
-		// Get the project & file ID
-		projectID := int(f.Path("projectID").Data().(float64))
-		fileID := int(f.Path("fileID").Data().(float64))
-
-		// Check the mod cache to see if we already have the right file ID installed
-		lastFileId, lastFilename := pack.modCache.GetLastModFile(projectID)
-		if lastFileId == fileID {
-			// Nothing to do; we can skip this installed file
-			fmt.Printf("Skipping %s\n", lastFilename)
-			continue
-		} else if lastFileId > 0 {
-			// A different version of the file is installed; clean it up
-			pack.modCache.CleanupModFile(projectID)
-		}
-
-		filename, err := pack.installMod(projectID, fileID)
+		modFile, err := newModPackFile(f)
 		if err != nil {
-			if ignoreFailedDownloads {
-				fmt.Printf("Ignoring failed download: %+v\n", err)
-			} else {
-				return err
-			}
-		} else {
-			// Download succeeded; register this mod as installed in the cache
-			pack.modCache.AddModFile(projectID, fileID, filename)
+			return err
 		}
-	}
 
-	// Also process any extfiles entries
-	extFiles, _ := pack.manifest.S("extfiles").ChildrenMap()
-	for key, url := range extFiles {
-		// Check the cache to see if the URL has changed
-		lastUrl, lastFilename := pack.modCache.GetLastExtURL(key)
-		if lastUrl == url.Data().(string) {
-			// Nothing to do; we already have a file installed
-			fmt.Printf("Skipping %s\n", lastFilename)
+		if !isClient && modFile.isClientOnly() {
+			fmt.Printf("Skipping client-only mod %s\n", modFile.getName())
 			continue
-		} else if lastUrl != "" {
-			// A different version of the file is installed; clean it up
-			pack.modCache.CleanupExtFile(key)
 		}
 
-		filename, err := pack.installModURL(url.Data().(string))
+		err = modFile.install(pack)
 		if err != nil {
-			if ignoreFailedDownloads {
-				fmt.Printf("Ignoring failed download: %+v\n", err)
-			} else {
-				return err
-			}
-		} else {
-			// Download succeeded; register this file
-			pack.modCache.AddExtFile(key, url.String(), filename)
+			return fmt.Errorf("error installing mod file: %+v", err)
 		}
 	}
 
 	return nil
 }
 
-func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
+func (pack *ModPack) selectMod(modFile ModPackFile) error {
 	// Make sure files entry exists in manifest
 	if !pack.manifest.Exists("files") {
 		pack.manifest.ArrayOfSizeP(0, "files")
-	}
-
-	// Add project & file IDs to manifest
-	modInfo := make(map[string]interface{})
-	modInfo["projectID"] = modFile.modID
-	modInfo["fileID"] = modFile.fileID
-	modInfo["required"] = true
-	modInfo["desc"] = modFile.modName
-
-	if clientOnly {
-		modInfo["clientOnly"] = true
 	}
 
 	// Walk through the list of files; if we find one with same project ID, delete it
 	existingIndex := -1
 	files, _ := pack.manifest.S("files").Children()
 	for i, child := range files {
-		childProjectID, _ := intValue(child, "projectID")
-		if childProjectID == modFile.modID {
+		if modFile.equalsJson(child) {
 			// Found a matching project ID; note the index so we can replace it
 			existingIndex = i
 			break
@@ -390,51 +344,42 @@ func (pack *ModPack) selectModFile(modFile *ModFile, clientOnly bool) error {
 	}
 
 	if existingIndex > -1 {
-		pack.manifest.S("files").SetIndex(modInfo, existingIndex)
+		pack.manifest.S("files").SetIndex(modFile.toJson(), existingIndex)
 	} else {
-		pack.manifest.ArrayAppendP(modInfo, "files")
+		pack.manifest.ArrayAppendP(modFile.toJson(), "files")
 	}
 
-	fmt.Printf("Registered %s (clientOnly=%t)\n", modFile.modName, clientOnly)
+	fmt.Printf("Registering: %s\n", modFile.getName())
 	return nil
 }
 
-func (pack *ModPack) selectModURL(url, name string, clientOnly bool) error {
-	if name == "" {
-		return fmt.Errorf("No tag provided for %s: ", url)
-	}
-	// Insert the url by name into extfiles map
-	pack.manifest.Set(url, "extfiles", name)
-	fmt.Printf("Registered %s as %s (clientOnly=%t)\n", url, name, clientOnly)
-	return pack.saveManifest()
-}
-
-func (pack *ModPack) updateMods(db *Database, dryRun bool) error {
+func (pack *ModPack) updateMods(dryRun bool) error {
 	// Walk over each file, looking for a more recent file ID for the
 	// appropriate version
 	files, _ := pack.manifest.S("files").Children()
 	for _, child := range files {
+		modFile, err := newModPackFile(child)
+		if err != nil {
+			return fmt.Errorf("unable to update: %+v", err)
+		}
+
 		isLocked := child.Exists("locked") && child.S("locked").Data().(bool)
-		modID, _ := intValue(child, "projectID")
-		fileID, _ := intValue(child, "fileID")
-		latestFile, err := db.getLatestModFile(modID, pack.minecraftVersion())
-		if err == nil && latestFile.fileID > fileID {
-			// Skip locked mods that have an update available
-			if isLocked {
-				fmt.Printf("Skipping %s (locked)\n", latestFile.modName)
-				continue
-			}
+		if isLocked {
+			fmt.Printf("Skipping update: %s (locked)\n", modFile.getName())
+			continue
+		}
 
-			// If this is a dry run, don't make any actual changes
+		updated, err := modFile.update(pack)
+		if err != nil {
+			return err
+		}
+
+		if updated {
 			if dryRun {
-				fmt.Printf("Update available for %s: %d -> %d\n", latestFile.modName, fileID, latestFile.fileID)
-				continue
+				fmt.Printf("Update available: %s\n", modFile.getName())
+			} else {
+				pack.selectMod(modFile)
 			}
-
-			// Save the more recent file ID
-			child.Set(latestFile.fileID, "fileID")
-			child.Set(latestFile.modName, "desc")
-			fmt.Printf("Updating %s: %d -> %d\n", latestFile.modName, fileID, latestFile.fileID)
 		}
 	}
 
@@ -461,76 +406,6 @@ func (pack *ModPack) loadManifest() error {
 	}
 	pack.manifest = manifest
 	return nil
-}
-
-func (pack *ModPack) installMod(projectID, fileID int) (string, error) {
-	// First, resolve the project ID into a slug
-	slug, err := pack.db.findSlugByProject(projectID)
-	if err != nil {
-		return "", fmt.Errorf("failed to find slug for project %d: %+v", projectID, err)
-	}
-
-	// Now, retrieve the JSON descriptor for this file so we can get the CDN url
-	descriptorUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d/file/%d", projectID, fileID)
-	descriptor, err := getJSONFromURL(descriptorUrl)
-	if err != nil {
-		return "", fmt.Errorf("failed to retrieve descriptor for %s: %+v", slug, err)
-	}
-
-	finalUrl := descriptor.Path("downloadUrl").Data().(string)
-	return pack.installModURL(finalUrl)
-}
-
-func (pack *ModPack) installModURL(url string) (string, error) {
-	// Start the download
-	resp, err := HttpGet(url)
-	if err != nil {
-		return "", fmt.Errorf("Failed to download %s: %+v", url, err)
-	}
-	defer resp.Body.Close()
-
-	// If we didn't get back a 200, bail
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("failed to download %s status %d", url, resp.StatusCode)
-	}
-
-	// Extract the filename from the actual request (after following all redirects)
-	filename := filepath.Base(resp.Request.URL.Path)
-
-	// Check for Content-Disposition header
-	attachmentID := resp.Header.Get("Content-Disposition")
-	if strings.HasPrefix(attachmentID, "attachment; filename=") {
-		filename = strings.TrimPrefix(attachmentID, "attachment; filename=")
-	}
-
-	if !strings.HasSuffix(filename, ".jar") {
-		return "", fmt.Errorf("%s does not link to a valid mod file", url)
-	}
-
-	// Cleanup the filename
-	filename = strings.Replace(filename, " r", "-", -1)
-	filename = strings.Replace(filename, " ", "-", -1)
-	filename = strings.Replace(filename, "+", "-", -1)
-	filename = strings.Replace(filename, "(", "-", -1)
-	filename = strings.Replace(filename, ")", "", -1)
-	filename = strings.Replace(filename, "[", "-", -1)
-	filename = strings.Replace(filename, "]", "", -1)
-	filename = strings.Replace(filename, "'", "", -1)
-	filename = filepath.Join(pack.modPath(), filename)
-
-	if fileExists(filename) {
-		fmt.Printf("Skipping %s\n", filepath.Base(filename))
-		return filepath.Base(filename), nil
-	}
-
-	// Save the stream of the response to the file
-	fmt.Printf("Downloading %s\n", filepath.Base(filename))
-
-	err = writeStream(filename, resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to write %s: %+v", filename, err)
-	}
-	return filepath.Base(filename), nil
 }
 
 func (pack *ModPack) installOverrides() error {
@@ -615,4 +490,13 @@ func (pack *ModPack) installServer() error {
 
 func (pack *ModPack) generateMMCConfig() error {
 	return generateMMCConfig(pack)
+}
+
+func newModPackFile(modJson *gabs.Container) (ModPackFile, error) {
+	if modJson.ExistsP("projectID") {
+		return NewCurseForgeModFile(modJson), nil
+	} else if modJson.ExistsP("artifactID") {
+		return NewMavenModFile(modJson), nil
+	}
+	return nil, fmt.Errorf("unkown mod file entry: %s", modJson.String())
 }

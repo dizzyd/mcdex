@@ -22,17 +22,19 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"golang.org/x/net/http2"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/net/http2"
 
 	"github.com/Jeffail/gabs"
 	"github.com/viki-org/dnscache"
@@ -97,6 +99,54 @@ func downloadHttpFile(url string, targetFile string) error {
 
 	// Copy the stream into the filename
 	return writeStream(targetFile, resp.Body)
+}
+
+func downloadHttpFileToDir(url string, targetDir string, skipIfExists bool) (string, error) {
+	// Start the download
+	resp, err := HttpGet(url)
+	if err != nil {
+		return "", fmt.Errorf("failed to download %s: %+v", url, err)
+	}
+	defer resp.Body.Close()
+
+	// If we didn't get back a 200, bail
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("failed to download %s status %d", url, resp.StatusCode)
+	}
+
+	// Extract the filename from the actual request (after following all redirects)
+	filename := filepath.Base(resp.Request.URL.Path)
+
+	// Check for Content-Disposition header
+	attachmentID := resp.Header.Get("Content-Disposition")
+	if strings.HasPrefix(attachmentID, "attachment; filename=") {
+		filename = strings.TrimPrefix(attachmentID, "attachment; filename=")
+	}
+
+	// Cleanup the filename
+	filename = strings.Replace(filename, " r", "-", -1)
+	filename = strings.Replace(filename, " ", "-", -1)
+	filename = strings.Replace(filename, "+", "-", -1)
+	filename = strings.Replace(filename, "(", "-", -1)
+	filename = strings.Replace(filename, ")", "", -1)
+	filename = strings.Replace(filename, "[", "-", -1)
+	filename = strings.Replace(filename, "]", "", -1)
+	filename = strings.Replace(filename, "'", "", -1)
+	filename = filepath.Join(targetDir, filename)
+
+	if skipIfExists && fileExists(filename) {
+		return filepath.Base(filename), nil
+	}
+
+	// Save the stream of the response to the file
+	fmt.Printf("Downloading %s\n", filepath.Base(filename))
+
+	err = writeStream(filename, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to write %s: %+v", filename, err)
+	}
+
+	return filepath.Base(filename), nil
 }
 
 func findJSONFile(z *zip.ReadCloser, name string) (*gabs.Container, error) {

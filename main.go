@@ -21,13 +21,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -39,7 +37,6 @@ var version string
 var ARG_MMC bool
 var ARG_VERBOSE bool
 var ARG_SKIPMODS bool
-var ARG_IGNORE_FAILED_DOWNLOADS bool
 var ARG_DRY_RUN bool
 
 type command struct {
@@ -91,18 +88,17 @@ var gCommands = map[string]command{
 		ArgsCount: 0,
 		Args:      "[<minecraft version>]",
 	},
-
 	"mod.select": {
 		Fn:        cmdModSelect,
 		Desc:      "Select a mod to include in the specified pack",
 		ArgsCount: 2,
-		Args:      "<directory/name> <mod name or URL> [<tag>]",
+		Args:      "<directory/name> <mod name or maven artifact ID> [<URL>]",
 	},
 	"mod.select.client": {
 		Fn:        cmdModSelectClient,
 		Desc:      "Select a client-side only mod to include in the specified pack",
 		ArgsCount: 2,
-		Args:      "<directory/name> <mod name or URL> [<tag>]",
+		Args:      "<directory/name> <mod name or maven artifact ID> [<URL>]",
 	},
 	"mod.update.all": {
 		Fn:        cmdModUpdateAll,
@@ -126,12 +122,6 @@ var gCommands = map[string]command{
 		Desc:      "List available versions of Forge",
 		ArgsCount: 1,
 		Args:      "<minecraft version>",
-	},
-	"openeye.to.manifest": {
-		Fn:        cmdOpenEyeToManifest,
-		Desc:      "Convert an OpenEye crash dump into a manifest.json",
-		ArgsCount: 1,
-		Args:      "<OpenEye Crash URL>",
 	},
 }
 
@@ -253,7 +243,7 @@ func cmdPackInstall() error {
 
 	if ARG_SKIPMODS == false {
 		// Install mods (include client-side only mods)
-		err = cp.installMods(true, ARG_IGNORE_FAILED_DOWNLOADS)
+		err = cp.installMods(true)
 		if err != nil {
 			return err
 		}
@@ -295,104 +285,24 @@ func cmdModSelectClient() error {
 
 var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
-func _modSelect(dir, mod, tag string, clientOnly bool) error {
+func _modSelect(dir, modId, url string, clientOnly bool) error {
 	// Try to open the mod pack
 	cp, err := NewModPack(dir, true, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
-	db, err := OpenDatabase()
+	// First, try to select the mod using Maven
+	err = SelectMavenModFile(cp, modId, url, clientOnly)
 	if err != nil {
-		return err
-	}
-
-	var modID int
-	var fileID int
-
-	// Try to parse the mod as a URL
-	url, err := url.Parse(mod)
-	if err == nil && (url.Scheme == "http" || url.Scheme == "https") {
-		// We have a URL; if it's not a CurseForge URL, treat it as an external file
-		if url.Host != "minecraft.curseforge.com" {
-			return cp.selectModURL(mod, tag, clientOnly)
-		}
-
-		// Otherwise, try to parse the project name & file ID out of the URL path
-		parts := curseForgeRegex.FindStringSubmatch(url.Path)
-		if len(parts) < 4 {
-			// Unknown structure on the CurseForge path; bail
-			return fmt.Errorf("invalid CurseForge URL")
-		}
-
-		modSlug := parts[1]
-		fileID, _ = strconv.Atoi(parts[3])
-
-		// Lookup the modID using the slug in a URL
-		modID, err = db.findModBySlug("https://minecraft.curseforge.com/projects/" + modSlug)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Try to lookup the mod ID by name
-		modID, err = db.findModByName(mod)
+		// Hmm, not a maven-based mod; let's try as a CurseForge mod
+		err = SelectCurseForgeModFile(cp, modId, url, clientOnly)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = _selectModFromID(cp, db, modID, fileID, clientOnly)
-	if err == nil {
-		return cp.saveManifest()
-	}
-
-	return err
-}
-
-func _selectModFromID(pack *ModPack, db *Database, modID, fileID int, clientOnly bool) error {
-	// At this point, we should have a modID and we may have a fileID. We want to walk major.minor.[patch]
-	// versions, and find either the latest file for our version of minecraft or verify that the fileID
-	// we have will work on this version
-	major, minor, patch, err := parseVersion(pack.minecraftVersion())
-	if err != nil {
-		// Invalid version string?!
-		return err
-	}
-
-	// Walk down patch versions, looking for our mod + file (or latest file if no fileID available)
-	for i := patch; i > -1; i-- {
-		var vsn string
-		if i > 0 {
-			vsn = fmt.Sprintf("%d.%d.%d", major, minor, i)
-		} else {
-			vsn = fmt.Sprintf("%d.%d", major, minor)
-		}
-
-		modFile, err := db.findModFile(modID, fileID, vsn)
-		if err == nil {
-			err := pack.selectModFile(modFile, clientOnly)
-			if err != nil {
-				return err
-			}
-
-			deps, err := db.getDeps(modFile.fileID)
-			if err != nil {
-				return fmt.Errorf("Error pulling deps for %d: %+v", modFile.fileID, err)
-			}
-
-			for _, dep := range deps {
-				err = _selectModFromID(pack, db, dep, 0, clientOnly)
-				if err != nil {
-					return err
-				}
-			}
-
-			return nil
-		}
-	}
-
-	// Didn't find a file that matches :(
-	return fmt.Errorf("No compatible file found for %d\n", modID)
+	return cp.saveManifest()
 }
 
 func listProjects(ptype int) error {
@@ -442,12 +352,7 @@ func cmdModUpdateAll() error {
 		return err
 	}
 
-	db, err := OpenDatabase()
-	if err != nil {
-		return err
-	}
-
-	err = cp.updateMods(db, ARG_DRY_RUN)
+	err = cp.updateMods(ARG_DRY_RUN)
 	if err != nil {
 		return err
 	}
@@ -487,7 +392,7 @@ func cmdServerInstall() error {
 	}
 
 	// Make sure all mods are installed (do NOT include client-side only)
-	err = cp.installMods(false, ARG_IGNORE_FAILED_DOWNLOADS)
+	err = cp.installMods(false)
 	if err != nil {
 		return err
 	}
@@ -517,74 +422,6 @@ func cmdDBUpdate() error {
 
 	fmt.Printf("Database up-to-date as of %s (%s)\n", elapsedFriendly, elapsed)
 	return nil
-}
-
-func cmdOpenEyeToManifest() error {
-	url := flag.Arg(1)
-
-	if !strings.Contains(url, "/browse/raw/crashes") {
-		return fmt.Errorf("Please provide the raw crash data URL")
-	}
-
-	crashData, err := getJSONFromURL(url)
-	if err != nil {
-		return err
-	}
-
-	db, err := OpenDatabase()
-	if err != nil {
-		return err
-	}
-
-	modPack, err := NewModPack(".", false, false)
-	if err != nil {
-		return err
-	}
-
-	// Lookup the minecraft version that corresponds with this version of Forge
-	forgeVsn := crashData.Path("forge").Index(0).Data().(string)
-	mcVsn, err := db.lookupMcVsn(forgeVsn)
-	if err != nil {
-		return err
-	}
-
-	err = modPack.createManifest("CrashGen", mcVsn, forgeVsn)
-	if err != nil {
-		return err
-	}
-
-	modPack.manifest.Set(url, "url")
-	modPack.manifest.Array("skipped")
-
-	// Retrieve all the individual file descriptors
-	sigs, _ := crashData.Path("allSignatures").Children()
-	for _, sig := range sigs {
-		fileData, err := getJSONFromURL(fmt.Sprintf("https://openeye.openmods.info/browse/raw/files/%s", sig.Data().(string)))
-		if err != nil {
-			fmt.Printf("Error retrieving %s: %+s\n", sig, err)
-			continue
-		}
-
-		// Get the mod name (if available) and use that to find a mod in the database
-		modNames, _ := fileData.Path("mods.name").Children()
-		for _, nameData := range modNames {
-			name := nameData.Data().(string)
-			modID, _ := db.findModByName(name)
-			if modID > 0 {
-				f, err := db.getLatestModFile(modID, mcVsn)
-				if err != nil {
-					modPack.manifest.ArrayAppend(name, "skipped")
-					continue
-				}
-				modPack.selectModFile(f, false)
-			} else {
-				modPack.manifest.ArrayAppend(name, "skipped")
-				fmt.Printf("Skipping unknown mod: %s\n", name)
-			}
-		}
-	}
-
-	return modPack.saveManifest()
 }
 
 func console(f string, args ...interface{}) {
@@ -642,7 +479,6 @@ func main() {
 	flag.Var(&mcDir, "mcdir", "Minecraft home folder to use. If -mmc is used, will use the value of -mmcdir as the default.")
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
-	flag.BoolVar(&ARG_IGNORE_FAILED_DOWNLOADS, "ignore", false, "Ignore failed mod downloads when installing a pack")
 	flag.BoolVar(&ARG_DRY_RUN, "n", false, "Dry run; don't save any changes to manifest")
 
 	// Process command-line args
