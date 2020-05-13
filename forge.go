@@ -61,7 +61,7 @@ func (fc forgeContext) forgeId() string {
 
 func (fc forgeContext) isForgeInstalled() bool {
 	if fc.isClient {
-		forgeFile := path.Join(fc.versionDir(), fc.forgeId(), fc.forgeId()+".jar")
+		forgeFile := path.Join(fc.versionDir(), fc.forgeId()+".jar")
 		return fileExists(forgeFile)
 	}
 	return false
