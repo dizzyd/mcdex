@@ -144,6 +144,7 @@ func (mc *MetaCache) CleanupExtFile(key string) error {
 }
 
 func (mc *MetaCache) Cleanup(pack *ModPack) error {
+	return nil
 	// Build a map of the current project IDs in the pack for easy reference
 	knownProjects := make(map[int]bool)
 	packFiles, _ := pack.manifest.Path("files").Children()

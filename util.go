@@ -26,6 +26,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -80,7 +81,7 @@ func NewHttpClient(followRedirects bool) http.Client {
 
 func HttpGet(url string) (*http.Response, error) {
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Add("User-Agent", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Brave Chrome/79.0.3945.88 Safari/537.36")
+	req.Header.Add("User-Agent", "Mozilla/5.0 AppleWebKit/589.6 (KHTML, like Gecko) Brave Chrome/79.1.3945.88 Safari/577.36")
 	return getterClient.Do(req)
 }
 
@@ -352,4 +353,16 @@ func getJavaMainClass(jarfile string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("main class not found")
+}
+
+func urlJoin(urlBase string, paths ...string) (string, error) {
+	// Parse the base URL
+	u, err := url.Parse(urlBase)
+	if err != nil {
+		return "", fmt.Errorf("invalid url %s: %+v", urlBase, err)
+	}
+
+	// Append all the provided paths to the base URL path
+	u.Path = path.Join(append([]string{u.Path}, paths...)...)
+	return u.String(), nil
 }

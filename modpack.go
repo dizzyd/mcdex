@@ -350,7 +350,7 @@ func (pack *ModPack) selectMod(modFile ModPackFile) error {
 	}
 
 	fmt.Printf("Registering: %s\n", modFile.getName())
-	return nil
+	return pack.saveManifest()
 }
 
 func (pack *ModPack) updateMods(dryRun bool) error {
@@ -467,8 +467,8 @@ func (pack *ModPack) generateMMCConfig() error {
 func newModPackFile(modJson *gabs.Container) (ModPackFile, error) {
 	if modJson.ExistsP("projectID") {
 		return NewCurseForgeModFile(modJson), nil
-	} else if modJson.ExistsP("artifactID") {
+	} else if modJson.ExistsP("module") {
 		return NewMavenModFile(modJson), nil
 	}
-	return nil, fmt.Errorf("unkown mod file entry: %s", modJson.String())
+	return nil, fmt.Errorf("unknown mod file entry: %s", modJson.String())
 }
