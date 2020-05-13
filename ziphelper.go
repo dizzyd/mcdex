@@ -11,9 +11,9 @@ import (
 )
 
 type ZipHelper struct {
-	data []byte
+	data   []byte
 	dataSz int64
-	files map[string]int
+	files  map[string]int
 }
 
 func NewZipHelper(data []byte) (*ZipHelper, error) {

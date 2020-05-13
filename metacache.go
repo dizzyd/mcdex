@@ -27,8 +27,8 @@ import (
 // don't need to re-download every file
 type MetaCache struct {
 	modPath string
-	db     *sql.DB
-	dbPath string
+	db      *sql.DB
+	dbPath  string
 }
 
 func OpenMetaCache(pack *ModPack) (*MetaCache, error) {
@@ -107,7 +107,6 @@ func (mc *MetaCache) GetLastExtURL(key string) (string, string) {
 	}
 	return url, filename
 }
-
 
 func (mc *MetaCache) CleanupModFile(projectId int) error {
 	var filename string

@@ -49,7 +49,9 @@ func installMinecraftJar(version string, isClient bool, baseDir string) (string,
 
 	// Grab the appropriate URL from the version manifest
 	key := "client"
-	if !isClient { key = "server"}
+	if !isClient {
+		key = "server"
+	}
 	url := manifest.Path("downloads." + key + ".url").Data().(string)
 
 	// Download the version into appropriate place

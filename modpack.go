@@ -610,7 +610,6 @@ func (pack *ModPack) installServer() error {
 	//	}
 	//}
 
-
 	return nil
 }
 

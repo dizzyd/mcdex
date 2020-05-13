@@ -36,15 +36,15 @@ import (
 )
 
 type forgeContext struct {
-	baseDir string
-	tmpDir string
-	minecraftVsn string
-	forgeVsn string
+	baseDir        string
+	tmpDir         string
+	minecraftVsn   string
+	forgeVsn       string
 	installArchive *ZipHelper
-	installJson *gabs.Container
-	versionJson *gabs.Container
-	isClient bool
-	isLegacy bool
+	installJson    *gabs.Container
+	versionJson    *gabs.Container
+	isClient       bool
+	isLegacy       bool
 }
 
 func (fc forgeContext) artifactDir() string {
@@ -61,7 +61,7 @@ func (fc forgeContext) forgeId() string {
 
 func (fc forgeContext) isForgeInstalled() bool {
 	if fc.isClient {
-		forgeFile := path.Join(fc.versionDir(), fc.forgeId(), fc.forgeId() + ".jar")
+		forgeFile := path.Join(fc.versionDir(), fc.forgeId(), fc.forgeId()+".jar")
 		return fileExists(forgeFile)
 	}
 	return false
@@ -69,19 +69,19 @@ func (fc forgeContext) isForgeInstalled() bool {
 
 func installServerForge(minecraftVsn, forgeVsn, targetDir string) (string, error) {
 	return installForge(forgeContext{
-		baseDir:        targetDir,
-		minecraftVsn:   minecraftVsn,
-		forgeVsn:       forgeVsn,
-		isClient:       false,
+		baseDir:      targetDir,
+		minecraftVsn: minecraftVsn,
+		forgeVsn:     forgeVsn,
+		isClient:     false,
 	})
 }
 
 func installClientForge(minecraftVsn, forgeVsn string) (string, error) {
 	return installForge(forgeContext{
-		baseDir:        env().MinecraftDir,
-		minecraftVsn:   minecraftVsn,
-		forgeVsn:       forgeVsn,
-		isClient:       true,
+		baseDir:      env().MinecraftDir,
+		minecraftVsn: minecraftVsn,
+		forgeVsn:     forgeVsn,
+		isClient:     true,
 	})
 }
 
@@ -528,7 +528,7 @@ func parseProcessorArgs(processor *gabs.Container, context *forgeContext, data m
 	args, _ := processor.Path("args").Children()
 	for _, argItem := range args {
 		argStr := argItem.Data().(string)
-		if strings.HasPrefix(argStr,"{") {
+		if strings.HasPrefix(argStr, "{") {
 			// Reference to a variable in data
 			result = append(result, data[strings.Trim(argStr, "{}")])
 		} else if strings.HasPrefix(argStr, "[") {
@@ -557,10 +557,10 @@ func loadForgeData(context *forgeContext) (map[string]string, error) {
 	dataMap := make(map[string]string)
 	for k, v := range dataJsonMap {
 		value := v.Path(side).Data().(string)
-		if strings.HasPrefix(value,"[") {
+		if strings.HasPrefix(value, "[") {
 			// Artifact reference
 			dataMap[k] = path.Join(context.artifactDir(), artifactToPath(strings.Trim(value, "[]")))
-		} else if strings.HasPrefix(value,"'") {
+		} else if strings.HasPrefix(value, "'") {
 			// Literal
 			dataMap[k] = strings.Trim(value, "'")
 		} else {
@@ -577,7 +577,7 @@ func loadForgeData(context *forgeContext) (map[string]string, error) {
 	return dataMap, nil
 }
 
-func artifactToPath(id string) string{
+func artifactToPath(id string) string {
 	// First, break up the string into maven components: group, artifact and version
 	parts := strings.SplitN(id, ":", 3)
 	if len(parts) < 3 {

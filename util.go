@@ -46,7 +46,7 @@ var redirectClient = NewHttpClient(false)
 
 func NewHttpClient(followRedirects bool) http.Client {
 	t := http.Transport{
-		MaxIdleConnsPerHost: 10,
+		MaxIdleConnsPerHost:   10,
 		ResponseHeaderTimeout: time.Duration(10 * time.Second),
 		ExpectContinueTimeout: time.Duration(10 * time.Second),
 		Dial: func(network string, address string) (net.Conn, error) {
@@ -57,7 +57,7 @@ func NewHttpClient(followRedirects bool) http.Client {
 				// IPv6 address; need to wrap it in brackets
 				ipStr = fmt.Sprintf("[%s]", ipStr)
 			}
-			conn, err := net.DialTimeout("tcp", ipStr + address[separator:], connTimeout)
+			conn, err := net.DialTimeout("tcp", ipStr+address[separator:], connTimeout)
 			if err != nil {
 				return nil, err
 			}

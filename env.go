@@ -69,7 +69,7 @@ func unpack200Cmd() string {
 }
 
 func javaCmd() string {
-	return filepath.Join(envData.JavaDir, "bin", "java" + _executableExt())
+	return filepath.Join(envData.JavaDir, "bin", "java"+_executableExt())
 }
 
 func vlog(f string, args ...interface{}) {
