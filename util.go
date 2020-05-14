@@ -69,7 +69,7 @@ func NewHttpClient(followRedirects bool) http.Client {
 	}
 	err := http2.ConfigureTransport(&t)
 	if err != nil {
-		fmt.Printf("Err configuring http2: %+v\n", err)
+		fmt.Printf("Error configuring http2: %+v\n", err)
 	}
 
 	if !followRedirects {
