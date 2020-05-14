@@ -234,20 +234,6 @@ func (db *Database) getLatestFileTstamp() (int, error) {
 	return tstamp, err
 }
 
-func (db *Database) getLatestFileID(projectID int, mcvsn string) (int, error) {
-	// Now find the latest release or beta version
-	var fileID int
-	err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
-		projectID, mcvsn).Scan(&fileID)
-	switch {
-	case err == sql.ErrNoRows:
-		return -1, fmt.Errorf("No file found for %s on Minecraft %s", projectID, mcvsn)
-	case err != nil:
-		return -1, err
-	}
-	return fileID, nil
-}
-
 func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
 	var modID int
 	err := db.sqlDb.QueryRow("select projectid from projects where type = ? and slug = ?", ptype, slug).Scan(&modID)
@@ -288,22 +274,14 @@ func (db *Database) findModByName(name string) (int, error) {
 	return modID, nil
 }
 
-func (db *Database) findModFile(projectID int, mcversion string) (*CurseForgeModFile, error) {
-	var fileID int
-	err := db.sqlDb.QueryRow("select fileid from files where projectid = ? and version = ? order by tstamp desc limit 1",
-		projectID, mcversion).Scan(&fileID)
+func (db *Database) getProjectInfo(projectID int) (string, string, string, error) {
+	var slug, name, desc string
+	err := db.sqlDb.QueryRow("select slug, name, description from projects where projectid = ? and type = 0", projectID).Scan(&slug, &name, &desc)
 	if err != nil {
-		return nil, fmt.Errorf("no recent file for project %d / %s version", projectID, mcversion)
+		return "", "", "", fmt.Errorf("failed to get project info for %d: %+v", projectID, err)
 	}
 
-	// We matched some file; pull the name and description for the mod
-	var name, desc string
-	err = db.sqlDb.QueryRow("select slug, description from projects where projectid = ?", projectID).Scan(&name, &desc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve name, description for project %d: %+v", projectID, err)
-	}
-
-	return &CurseForgeModFile{fileID: fileID, projectID: projectID, name: name, desc: desc}, nil
+	return slug, name, desc, nil
 }
 
 func (db *Database) getDeps(fileID int) ([]string, error) {

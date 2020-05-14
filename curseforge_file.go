@@ -19,6 +19,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/Jeffail/gabs"
 )
@@ -38,56 +39,29 @@ func SelectCurseForgeModFile(pack *ModPack, mod string, url string, clientOnly b
 		return fmt.Errorf("unknown mod %s", mod)
 	}
 
-	// Parse out minecraft version so we can traverse
-	major, minor, patch, err := parseVersion(pack.minecraftVersion())
+	// Look up the slug, name and description
+	_, name, desc, err := pack.db.getProjectInfo(projectID)
 	if err != nil {
-		// Invalid version string
-		return err
+		return fmt.Errorf("no name/description available for %s (%d): %+v", mod, projectID, err)
 	}
 
-	// Now walk the major.minor.[path] versions of Minecraft and find the latest file for our version
-	for i := patch; i > -1; i-- {
-		var vsn string
-		if i > 0 {
-			vsn = fmt.Sprintf("%d.%d.%d", major, minor, i)
-		} else {
-			vsn = fmt.Sprintf("%d.%d", major, minor)
-		}
+	// Setup a mod file entry and then pull the latest file info
+	modFile := CurseForgeModFile{projectID: projectID, desc: desc, name: name, clientOnly: clientOnly}
+	fileId, err := modFile.getLatestFile(pack.minecraftVersion())
+	if err != nil {
+		return fmt.Errorf("failed to get latest file for %s (%d): %+v", mod, projectID, err)
+	}
 
-		modFile, err := pack.db.findModFile(projectID, vsn)
-		if err != nil {
-			// No mod found; keep walking versions
-			continue
-		}
-
-		modFile.clientOnly = clientOnly
-
-		// Found a valid mod; add it to the pack manifest
-		err = pack.selectMod(modFile)
+	// If we found a newer file, update entry and then the pack
+	if fileId > modFile.fileID {
+		modFile.fileID = fileId
+		err = pack.selectMod(&modFile)
 		if err != nil {
 			return err
 		}
-
-		// Now scan all deps for the mod
-		// TODO: Figure out a better way to avoid multiple hits to database per dep slug
-		deps, err := pack.db.getDeps(modFile.fileID)
-		if err != nil {
-			return fmt.Errorf("error pulling deps for %s: %+v", modFile.name, err)
-		}
-
-		// Recursively add each dep to the pack
-		for _, dep := range deps {
-			err = SelectCurseForgeModFile(pack, dep, "", clientOnly)
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
 	}
 
-	// Didn't find a file that matches :(
-	return fmt.Errorf("no compatible file found for %s\n", mod)
+	return nil
 }
 
 func NewCurseForgeModFile(modJson *gabs.Container) *CurseForgeModFile {
@@ -140,7 +114,7 @@ func (f CurseForgeModFile) install(pack *ModPack) error {
 }
 
 func (f *CurseForgeModFile) update(pack *ModPack) (bool, error) {
-	latestFile, err := pack.db.getLatestFileID(f.projectID, pack.minecraftVersion())
+	latestFile, err := f.getLatestFile(pack.minecraftVersion())
 	if err != nil {
 		return false, err
 	}
@@ -177,4 +151,37 @@ func (f CurseForgeModFile) toJson() map[string]interface{} {
 		result["clientOnly"] = true
 	}
 	return result
+}
+
+func (f CurseForgeModFile) getLatestFile(minecraftVersion string) (int, error) {
+	// Pull the project's descriptor, which has a list of the latest files for each version of Minecraft
+	projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", f.projectID)
+	project, err := getJSONFromURL(projectUrl)
+	if err != nil {
+		return -1, fmt.Errorf("failed to retrieve project for %s: %+v", f.name, err)
+	}
+
+	selectedFileType := math.MaxInt8
+	selectedFileId := 0
+
+	// Look for the file with the matching version
+	files, _ := project.Path("gameVersionLatestFiles").Children()
+	for _, file := range files {
+		fileType, _ := intValue(file, "fileType") // 1 = release, 2 = beta, 3 = alpha
+		fileId, _ := intValue(file, "projectFileId")
+		targetVsn := file.Path("gameVersion").Data().(string)
+
+		if targetVsn != minecraftVersion {
+			continue
+		}
+
+		// Matched on version; prefer releases over beta/alpha
+		if fileType < selectedFileType {
+			selectedFileType = fileType
+			selectedFileId = fileId
+		}
+	}
+
+	// TODO: Pull file descriptor and check for deps
+	return selectedFileId, nil
 }
