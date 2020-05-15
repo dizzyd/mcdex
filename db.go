@@ -68,13 +68,13 @@ func InstallDatabase(skipIfExists bool) error {
 	}
 
 	// Get the latest version
-	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v4")
+	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v5")
 	if err != nil {
 		return err
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
-	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v4-%s.dat.bz2", version)
+	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v5-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
