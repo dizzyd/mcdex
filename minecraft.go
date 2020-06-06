@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/Jeffail/gabs"
 	"path"
+	"path/filepath"
+
+	"github.com/Jeffail/gabs"
 )
 
 const GLOBAL_MANIFEST = "https://launchermeta.mojang.com/mc/game/version_manifest.json"
@@ -14,9 +16,9 @@ func installMinecraftJar(version string, isClient bool, baseDir string) (string,
 	// directory for servers
 	var filename string
 	if isClient {
-		filename = path.Join(baseDir, "versions", version, version+".jar")
+		filename = filepath.Join(baseDir, "versions", version, version+".jar")
 	} else {
-		filename = path.Join(baseDir, fmt.Sprintf("minecraft_server.%s.jar", version))
+		filename = filepath.Join(baseDir, fmt.Sprintf("minecraft_server.%s.jar", version))
 	}
 
 	if fileExists(filename) {

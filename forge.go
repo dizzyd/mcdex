@@ -48,11 +48,11 @@ type forgeContext struct {
 }
 
 func (fc forgeContext) artifactDir() string {
-	return path.Join(fc.baseDir, "libraries")
+	return filepath.Join(fc.baseDir, "libraries")
 }
 
 func (fc forgeContext) versionDir() string {
-	return path.Join(fc.baseDir, "versions", fc.forgeId())
+	return filepath.Join(fc.baseDir, "versions", fc.forgeId())
 }
 
 func (fc forgeContext) forgeId() string {
@@ -61,7 +61,7 @@ func (fc forgeContext) forgeId() string {
 
 func (fc forgeContext) isForgeInstalled() bool {
 	if fc.isClient {
-		forgeFile := path.Join(fc.versionDir(), fc.forgeId()+".jar")
+		forgeFile := filepath.Join(fc.versionDir(), fc.forgeId()+".jar")
 		return fileExists(forgeFile)
 	}
 	return false
@@ -210,7 +210,7 @@ func installForgeArtifacts(context *forgeContext) error {
 	// For client installs, the version file needs to be written to disk
 	if context.isClient {
 		versionFile := fmt.Sprintf("%s.json", context.forgeId())
-		err := writeStringFile(path.Join(context.versionDir(), versionFile),
+		err := writeStringFile(filepath.Join(context.versionDir(), versionFile),
 			context.versionJson.StringIndent("", " "))
 		if err != nil {
 			return fmt.Errorf("failed to write version.json: %+v", err)
@@ -234,13 +234,13 @@ func installForgeArtifacts(context *forgeContext) error {
 	if context.isLegacy {
 		sourceFile = context.installJson.S("filePath").Data().(string)
 		if context.isClient {
-			targetFile = path.Join(context.artifactDir(), path.Dir(artifactToPath(artifactId)), forgeFilename)
+			targetFile = filepath.Join(context.artifactDir(), path.Dir(artifactToPath(artifactId)), forgeFilename)
 		} else {
-			targetFile = path.Join(context.baseDir, forgeFilename)
+			targetFile = filepath.Join(context.baseDir, forgeFilename)
 		}
 	} else {
-		sourceFile = path.Join("maven", artifactToPath(artifactId))
-		targetFile = path.Join(context.baseDir, forgeFilename)
+		sourceFile = filepath.Join("maven", artifactToPath(artifactId))
+		targetFile = filepath.Join(context.baseDir, forgeFilename)
 	}
 
 	logAction("Installing %s...\n", artifactId)
@@ -277,7 +277,7 @@ func installForgeLibrary(library *gabs.Container, context *forgeContext) error {
 			// No URL provided, so we need to look in the installer, under maven/
 			filename := library.Path("downloads.artifact.path").Data().(string)
 			sourceFile := path.Join("maven", filename)
-			targetFile := path.Join(context.artifactDir(), filename)
+			targetFile := filepath.Join(context.artifactDir(), filename)
 
 			logAction("Installing %s...\n", name)
 			_, err := context.installArchive.writeFile(sourceFile, targetFile)
@@ -459,6 +459,9 @@ func invokeUnpack200(libDir, libName string) error {
 func invokeProcessor(name string, args []string) error {
 	logAction("Running processor %s...\n", name)
 	cmd := exec.Command(javaCmd(), args...)
+	if ARG_VERBOSE {
+		fmt.Printf("Processor command: %s\n", cmd.String())
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("%s\n", out)
@@ -489,19 +492,19 @@ func runForgeProcessors(context *forgeContext, minecraftJar string) error {
 
 		// Translate the processor artifact to a path
 		processor := p.Path("jar").Data().(string)
-		processorJarName := path.Join(context.artifactDir(), artifactToPath(processor))
+		processorJarName := filepath.Join(context.artifactDir(), artifactToPath(processor))
 
 		// Build a classpath string
 		classpathItems, _ := p.Path("classpath").Children()
 		var classpathJars []string
 		for _, item := range classpathItems {
-			entry := path.Join(context.artifactDir(), artifactToPath(item.Data().(string)))
+			entry := filepath.Join(context.artifactDir(), artifactToPath(item.Data().(string)))
 			classpathJars = append(classpathJars, entry)
 		}
 
 		// Add the processor jar as the final entry on the classpath
 		classpathJars = append(classpathJars, processorJarName)
-		args = append(args, "-classpath", strings.Join(classpathJars, ":"))
+		args = append(args, "-classpath", strings.Join(classpathJars, string(filepath.ListSeparator)))
 
 		// Get the Java main class from processor jar
 		mainClass, err := getJavaMainClass(processorJarName)
@@ -533,7 +536,7 @@ func parseProcessorArgs(processor *gabs.Container, context *forgeContext, data m
 			result = append(result, data[strings.Trim(argStr, "{}")])
 		} else if strings.HasPrefix(argStr, "[") {
 			// Reference to an artifact
-			result = append(result, path.Join(context.artifactDir(), artifactToPath(strings.Trim(argStr, "[]"))))
+			result = append(result, filepath.Join(context.artifactDir(), artifactToPath(strings.Trim(argStr, "[]"))))
 		} else {
 			result = append(result, argStr)
 		}
@@ -559,7 +562,7 @@ func loadForgeData(context *forgeContext) (map[string]string, error) {
 		value := v.Path(side).Data().(string)
 		if strings.HasPrefix(value, "[") {
 			// Artifact reference
-			dataMap[k] = path.Join(context.artifactDir(), artifactToPath(strings.Trim(value, "[]")))
+			dataMap[k] = filepath.Join(context.artifactDir(), artifactToPath(strings.Trim(value, "[]")))
 		} else if strings.HasPrefix(value, "'") {
 			// Literal
 			dataMap[k] = strings.Trim(value, "'")
@@ -605,6 +608,6 @@ func artifactToPath(id string) string {
 		suffix = "-" + vsnParts[1]
 	}
 
-	return path.Join(path.Join(groupID...), artifactID, vsn,
+	return filepath.Join(filepath.Join(groupID...), artifactID, vsn,
 		fmt.Sprintf("%s-%s%s.%s", artifactID, vsn, suffix, ext))
 }

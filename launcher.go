@@ -20,7 +20,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
-	"path"
+	"path/filepath"
 	"regexp"
 
 	"github.com/Jeffail/gabs"
@@ -36,7 +36,7 @@ type launcherConfig struct {
 
 func newLauncherConfig() (*launcherConfig, error) {
 	lc := new(launcherConfig)
-	lc.filename = path.Join(env().MinecraftDir, "launcher_profiles.json")
+	lc.filename = filepath.Join(env().MinecraftDir, "launcher_profiles.json")
 	lc.data = gabs.New()
 
 	if fileExists(lc.filename) {

@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"bytes"
 	"fmt"
-	"github.com/Jeffail/gabs"
 	"io"
 	"os"
 	"path"
+	"path/filepath"
+
+	"github.com/Jeffail/gabs"
 )
 
 type ZipHelper struct {
@@ -63,7 +65,7 @@ func (zh *ZipHelper) getJsonFile(name string) (*gabs.Container, error) {
 }
 
 func (zh *ZipHelper) writeFileToDir(zipFilename string, targetDir string) (string, error) {
-	return zh.writeFile(zipFilename, path.Join(targetDir, zipFilename))
+	return zh.writeFile(zipFilename, filepath.Join(targetDir, zipFilename))
 }
 
 func (zh *ZipHelper) writeFile(zipFilename string, filename string) (string, error) {
