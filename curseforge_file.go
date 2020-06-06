@@ -132,7 +132,7 @@ func (f CurseForgeModFile) getName() string {
 }
 
 func (f CurseForgeModFile) isClientOnly() bool {
-	return false
+	return f.clientOnly
 }
 
 func (f CurseForgeModFile) equalsJson(modJson *gabs.Container) bool {
