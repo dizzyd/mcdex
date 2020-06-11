@@ -242,7 +242,7 @@ func readStringFile(filename string) (string, error) {
 
 func writeStringFile(filename, data string) error {
 	// Ensure all the necessary directories exist
-	err := os.MkdirAll(path.Dir(filename), 0700)
+	err := os.MkdirAll(filepath.Dir(filename), 0700)
 	if err != nil {
 		return err
 	}

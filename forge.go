@@ -234,7 +234,7 @@ func installForgeArtifacts(context *forgeContext) error {
 	if context.isLegacy {
 		sourceFile = context.installJson.S("filePath").Data().(string)
 		if context.isClient {
-			targetFile = filepath.Join(context.artifactDir(), path.Dir(artifactToPath(artifactId)), forgeFilename)
+			targetFile = filepath.Join(context.artifactDir(), filepath.Dir(artifactToPath(artifactId)), forgeFilename)
 		} else {
 			targetFile = filepath.Join(context.baseDir, forgeFilename)
 		}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/Jeffail/gabs"
@@ -75,7 +74,7 @@ func (zh *ZipHelper) writeFile(zipFilename string, filename string) (string, err
 	}
 
 	// Make sure all the directories in the filename actually exist
-	err = os.MkdirAll(path.Dir(filename), 0700)
+	err = os.MkdirAll(filepath.Dir(filename), 0700)
 	if err != nil {
 		return "", fmt.Errorf("failed to create directores for %s: %+v", filename, err)
 	}
