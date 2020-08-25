@@ -181,6 +181,9 @@ func (f CurseForgeModFile) getLatestFile(minecraftVersion string) (int, error) {
 			selectedFileId = fileId
 		}
 	}
+	if selectedFileId == 0 {
+		return -1, fmt.Errorf("there is no file of %s for MC version %s", f.name, minecraftVersion)
+	}
 
 	// TODO: Pull file descriptor and check for deps
 	return selectedFileId, nil
