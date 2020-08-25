@@ -146,7 +146,7 @@ func (db *Database) listForge(mcvsn string, verbose bool) error {
 
 func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
 	var forgeVsn string
-	err := db.sqlDb.QueryRow("select version from forge where mcvsn = ? and isrec = 1", mcvsn).Scan(&forgeVsn)
+	err := db.sqlDb.QueryRow("select version from forge where mcvsn = ?", mcvsn).Scan(&forgeVsn)
 	switch {
 	case err == sql.ErrNoRows:
 		return "", fmt.Errorf("No Forge version found for %s", mcvsn)
@@ -175,9 +175,9 @@ func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
 		return fmt.Errorf("Failed to convert %s into regex: %s", slug, err)
 	}
 
-	query := "select slug, description, downloads from projects where type = ? and projectid in (select projectid from files where version = ?) order by slug"
+	query := "select slug, description from projects where type = ? and projectid in (select projectid from files where version = ?) order by slug"
 	if mcvsn == "" {
-		query = "select slug, description, downloads from projects where type = ? order by slug"
+		query = "select slug, description from projects where type = ? order by slug"
 	}
 
 	rows, err := db.sqlDb.Query(query, ptype, mcvsn)
@@ -189,15 +189,14 @@ func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
 	// For each row, check the name against the pre-compiled regex
 	for rows.Next() {
 		var slug, desc string
-		var downloads int
-		err = rows.Scan(&slug, &desc, &downloads)
+		err = rows.Scan(&slug, &desc)
 		if err != nil {
 			return err
 		}
 
 		if slug == "" || slugRegex.MatchString(slug) {
 			msg := message.NewPrinter(language.English)
-			msg.Printf("%s | %s | %d downloads\n", slug, desc, downloads)
+			msg.Printf("%s | %s \n", slug, desc)
 		}
 	}
 
@@ -205,7 +204,7 @@ func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
 }
 
 func (db *Database) printLatestProjects(mcvsn string, ptype int) error {
-	rows, err := db.sqlDb.Query(`select slug, description, downloads from projects 
+	rows, err := db.sqlDb.Query(`select slug, description from projects 
 									    where type = ? and projectid in 
 									    (select projectid from files order by tstamp desc) limit 100`, ptype)
 	if err != nil {
@@ -215,15 +214,14 @@ func (db *Database) printLatestProjects(mcvsn string, ptype int) error {
 
 	for rows.Next() {
 		var modSlug, modDesc string
-		var modDownloads int
 
-		err = rows.Scan(&modSlug, &modDesc, &modDownloads)
+		err = rows.Scan(&modSlug, &modDesc)
 		if err != nil {
 			return err
 		}
 
 		msg := message.NewPrinter(language.English)
-		msg.Printf("%s | %s | %d downloads\n", modSlug, modDesc, modDownloads)
+		msg.Printf("%s | %s\n", modSlug, modDesc)
 	}
 	return nil
 }
