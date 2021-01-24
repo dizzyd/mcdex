@@ -187,10 +187,8 @@ func cmdPackInstall() error {
 		return err
 	}
 
-	// If the URL is provided and doesn't actually conform with a URL spec, try to translate
-	// by treating as a slug and finding the latest file URL
-	if url != "" && !strings.HasPrefix(url, "https://") {
-		url, err = db.getLatestPackURL(url)
+	if dir != "" && !strings.HasPrefix(url, "https://") {
+		url, err = db.getLatestPackURL(dir)
 		if err != nil {
 			return err
 		}
