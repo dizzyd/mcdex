@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/xeonx/timeago"
@@ -67,9 +66,9 @@ var gCommands = map[string]command{
 	},
 	"pack.install": {
 		Fn:        cmdPackInstall,
-		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", NamePlaceholder),
+		Desc:      fmt.Sprintf("Install a mod pack, using either a manifest in the provided folder, or using  slug or project ID.\nOptionally using a fileID to specify a specific version of the mod pack to download.\nUse %s for the directory with a slug/projectID to use the name from the downloaded manifest", NamePlaceholder),
 		ArgsCount: 1,
-		Args:      "<directory/name> [<url>]",
+		Args:      "<directory/name> [<slug/projectID> <fileID>]",
 	},
 	"info": {
 		Fn:        cmdInfo,
@@ -149,7 +148,7 @@ func cmdPackCreate() error {
 	}
 
 	// Create a new pack directory
-	cp, err := NewModPack(dir, false, ARG_MMC)
+	cp, err := NewModPack(dir, 0, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -180,22 +179,27 @@ func cmdPackCreate() error {
 
 func cmdPackInstall() error {
 	dir := flag.Arg(1)
-	url := flag.Arg(2)
+	slug := flag.Arg(2)
+	fileID := flag.Arg(3)
+	url := ""
 
 	db, err := OpenDatabase()
 	if err != nil {
 		return err
 	}
 
-	if dir != "" && !strings.HasPrefix(url, "https://") {
-		url, err = db.getLatestPackURL(dir)
+	if slug != "" {
+		url, err = db.getLatestPackURL(slug, fileID)
 		if err != nil {
 			return err
 		}
 	}
 
 	// Only require a manifest if we're not installing from a URL
-	requireManifest := url == ""
+	requireManifest := 0
+	if url == "" {
+		requireManifest = 2
+	}
 
 	cp, err := NewModPack(dir, requireManifest, ARG_MMC)
 	if err != nil {
@@ -285,7 +289,7 @@ var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
 func _modSelect(dir, modId, url string, clientOnly bool) error {
 	// Try to open the mod pack
-	cp, err := NewModPack(dir, true, ARG_MMC)
+	cp, err := NewModPack(dir, 1, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -345,7 +349,7 @@ func cmdPackListLatest() error {
 func cmdModUpdateAll() error {
 	dir := flag.Arg(1)
 
-	cp, err := NewModPack(dir, true, ARG_MMC)
+	cp, err := NewModPack(dir, 1, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -378,7 +382,7 @@ func cmdServerInstall() error {
 
 	// Open the pack; we require the manifest and any
 	// config files to already be present
-	cp, err := NewModPack(dir, true, false)
+	cp, err := NewModPack(dir, 1, false)
 	if err != nil {
 		return err
 	}

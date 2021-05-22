@@ -69,8 +69,12 @@ func (pack *ModPack) fullName() string {
 	)
 }
 
-func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack, error) {
+func NewModPack(dir string, TrequireManifest int, enableMultiMC bool) (*ModPack, error) {
 	pack := new(ModPack)
+	requireManifest := false;
+	if TrequireManifest > 0 {
+		requireManifest = true;
+	}
 
 	// Open a copy of the database for modpack related ops
 	db, err := OpenDatabase()
@@ -110,7 +114,11 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 	// Try to load the manifest; only raise an error if we require it to be loaded
 	err = pack.loadManifest()
 	if requireManifest && err != nil {
-		return nil, err
+		if TrequireManifest == 2 {
+			return nil, fmt.Errorf("%v\nIf you meant to install a modpack identified by %[2]s run:\n\tmcdex pack.install %[2]s %[2]s\n", err, dir)
+		} else {
+			return nil, err
+		}
 	}
 
 	fmt.Printf("-- %s --\n", pack.gamePath())
@@ -157,10 +165,11 @@ func (pack *ModPack) download(url string) error {
 
 	fmt.Printf("Starting download of modpack: %s\n", url)
 
+	// This doesn't work any more.
 	// For the moment, we only support modpacks from Curseforge or FTB; check and enforce these conditions
-	if !hasAnyPrefix(url, VALID_URL_PREFIXES...) {
-		return fmt.Errorf("Invalid modpack URL; we only support Curseforge & feed-the-beast.com right now")
-	}
+	//if !hasAnyPrefix(url, VALID_URL_PREFIXES...) {
+	//	return fmt.Errorf("Invalid modpack URL; we only support Curseforge & feed-the-beast.com right now")
+	//}
 
 	// Start the download
 	resp, err := HttpGet(url)
