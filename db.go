@@ -23,6 +23,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"math"
 
 	"regexp"
 
@@ -314,25 +316,58 @@ func (db *Database) getDeps(fileID int) ([]string, error) {
 	return result, nil
 }
 
-func (db *Database) getLatestPackURL(slug string) (string, error) {
+func (db *Database) getLatestPackURL(slug string, fileID string) (string, error) {
 	// First try to find the pack by looking for the specific slug
-	pid, err := db.findProjectBySlug(slug, 1)
+	projectID, err := db.findProjectBySlug(slug, 1)
 	if err != nil {
-		return "", err
+		projectID, err = strconv.Atoi(slug)
+		if err != nil {
+			return "", fmt.Errorf("No modpack found %s", slug)
+		} else {
+			fmt.Printf("Interpretting %s as project ID\n", slug);
+		}
+	}
+	
+	
+	url := ""
+	
+	if fileID != "" {		
+		// Retrieve the JSON descriptor for this file so we can get the CDN url
+		descriptorUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d/file/%s", projectID, fileID)
+		descriptor, err := getJSONFromURL(descriptorUrl)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve descriptor for %s: %+v", slug, err)
+		}
+
+		// Download the file to the pack mod directory
+		url = descriptor.Path("downloadUrl").Data().(string)
+	} else {
+		projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", projectID)
+		project, err := getJSONFromURL(projectUrl)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve project for %s: %+v", slug, err)
+		}
+
+		selectedFileType := math.MaxInt8
+
+		// Look for the file with most stable release type
+		files, _ := project.Path("latestFiles").Children()
+		for _, file := range files {
+			fileType, _ := intValue(file, "releaseType") // 1 = release, 2 = beta, 3 = alpha
+			fileUrl, _ := file.Path("downloadUrl").Data().(string)
+
+			// Prefer releases over beta/alpha
+			if fileType < selectedFileType {
+				selectedFileType = fileType
+				url = fileUrl
+			}
+		}
+
+		if url == "" {
+			return "", fmt.Errorf("Unable to find download URL for %s\n", slug)
+		}
 	}
 
-	// Find the latest file given the project ID; we don't need to worry about matching the MC version,
-	// since modpacks are always locked to a specific version anyways
-	var fileID int
-	err = db.sqlDb.QueryRow("select fileid from files where projectid = ? order by tstamp desc limit 1", pid).Scan(&fileID)
-	switch {
-	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No modpack file found for %s", slug)
-	case err != nil:
-		return "", err
-	}
-
-	// Construct a URL using the slug and file ID
-	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil
+	return url, nil
 
 }
