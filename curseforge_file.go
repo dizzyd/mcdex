@@ -87,16 +87,15 @@ func (f CurseForgeModFile) install(pack *ModPack) error {
 		pack.modCache.CleanupModFile(f.projectID)
 	}
 
-	// Resolve the project ID into a slug
-	slug, err := pack.db.findSlugByProject(f.projectID)
-	if err != nil {
-		return fmt.Errorf("failed to find slug for project %d: %+v", f.projectID, err)
-	}
-
 	// Now, retrieve the JSON descriptor for this file so we can get the CDN url
 	descriptorUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d/file/%d", f.projectID, f.fileID)
 	descriptor, err := getJSONFromURL(descriptorUrl)
 	if err != nil {
+		// Resolve the project ID into a slug
+		slug, err2 := pack.db.findSlugByProject(f.projectID)
+		if err2 != nil {
+			return fmt.Errorf("failed to find slug and download url for project %d: %+v\n%+v", f.projectID, err, err2)
+		}
 		return fmt.Errorf("failed to retrieve descriptor for %s: %+v", slug, err)
 	}
 
