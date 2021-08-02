@@ -46,6 +46,7 @@ type ModPack struct {
 	manifest *gabs.Container
 	modCache *MetaCache
 	db       *Database
+	modLoader string
 }
 
 type ModPackFile interface {
@@ -69,7 +70,11 @@ func (pack *ModPack) fullName() string {
 	)
 }
 
-func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack, error) {
+func OpenModPack(dir string, enableMultiMC bool) (*ModPack, error) {
+	return NewModPack(dir, "00", true, enableMultiMC)
+}
+
+func NewModPack(dir string, modLoader string, requireManifest bool, enableMultiMC bool) (*ModPack, error) {
 	pack := new(ModPack)
 
 	// Open a copy of the database for modpack related ops
@@ -110,7 +115,21 @@ func NewModPack(dir string, requireManifest bool, enableMultiMC bool) (*ModPack,
 	// Try to load the manifest; only raise an error if we require it to be loaded
 	err = pack.loadManifest()
 	if requireManifest && err != nil {
-		return nil, err
+			return nil, err
+	}
+
+	// If we loaded a manifest from disk, use the provided mod loader; otherwise, fallback to
+	// user provided
+	if pack.manifest != nil && pack.manifest.ExistsP("minecraft.modLoaders.id") {
+		// Identify the loader (forge or fabric)
+		loaderVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+		if strings.HasPrefix(loaderVsn, "fabric-") {
+			pack.modLoader = "fabric"
+		} else {
+			pack.modLoader = "forge"
+		}
+	} else {
+		pack.modLoader = modLoader
 	}
 
 	fmt.Printf("-- %s --\n", pack.gamePath())
@@ -227,7 +246,7 @@ func (pack *ModPack) minecraftVersion() string {
 	return pack.manifest.Path("minecraft.version").Data().(string)
 }
 
-func (pack *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
+func (pack *ModPack) createManifest(name, minecraftVsn string) error {
 	// Create the manifest and set basic info
 	pack.manifest = gabs.New()
 	pack.manifest.SetP(minecraftVsn, "minecraft.version")
@@ -236,15 +255,28 @@ func (pack *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 	pack.manifest.SetP(name, "name")
 	pack.manifest.SetP("0.0.1", "version")
 
+	// Select the appropriate loader version based on Minecraft version
+	var err error
+	var loaderVsn string
+	if pack.modLoader == "fabric" {
+		loaderVsn, err = pack.db.lookupFabricVsn(minecraftVsn)
+	} else {
+		loaderVsn, err = pack.db.lookupForgeVsn(minecraftVsn)
+	}
+
+	if err != nil {
+		return err
+	}
+
 	loader := make(map[string]interface{})
-	loader["id"] = "forge-" + forgeVsn
+	loader["id"] = fmt.Sprintf("%s-%s", pack.modLoader, loaderVsn)
 	loader["primary"] = true
 
 	pack.manifest.ArrayOfSizeP(1, "minecraft.modLoaders")
 	pack.manifest.Path("minecraft.modLoaders").SetIndex(loader, 0)
 
 	// Write the manifest file
-	err := pack.saveManifest()
+	err = pack.saveManifest()
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
@@ -254,23 +286,27 @@ func (pack *ModPack) createManifest(name, minecraftVsn, forgeVsn string) error {
 
 func (pack *ModPack) getVersions() (string, string) {
 	minecraftVsn := pack.manifest.Path("minecraft.version").Data().(string)
-	forgeVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
-	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
-	return minecraftVsn, forgeVsn
+	loaderVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+	loaderVsn = strings.TrimPrefix(loaderVsn, pack.modLoader + "-")
+	return minecraftVsn, loaderVsn
 }
 
 func (pack *ModPack) createLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
-	// version of forge with the appropriate version
-	minecraftVsn, forgeVsn := pack.getVersions()
+	// version of forge|fabric with the appropriate version
+	minecraftVsn, loaderVsn := pack.getVersions()
 
-	var forgeID string
+	var loaderId string
 	var err error
 
-	// Install forge if necessary
-	forgeID, err = installClientForge(minecraftVsn, forgeVsn)
+	if pack.modLoader == "fabric" {
+		loaderId, err = installClientFabric(minecraftVsn, loaderVsn)
+	} else {
+		loaderId, err = installClientForge(minecraftVsn, loaderVsn)
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to install Forge %s: %+v", forgeVsn, err)
+		return fmt.Errorf("failed to install %s %s: %+v", pack.modLoader, loaderVsn, err)
 	}
 
 	// Check the manifest for any Java arguments
@@ -287,7 +323,7 @@ func (pack *ModPack) createLauncherProfile() error {
 	}
 
 	fmt.Printf("Creating profile: %s\n", pack.name)
-	err = lc.createProfile(pack.name, forgeID, pack.gamePath(), javaArgs)
+	err = lc.createProfile(pack.name, loaderId, pack.gamePath(), javaArgs)
 	if err != nil {
 		return fmt.Errorf("failed to create profile: %+v", err)
 	}
@@ -449,12 +485,18 @@ func (pack *ModPack) installOverrides() error {
 func (pack *ModPack) installServer() error {
 	// Get the minecraft + forge versions from manifest
 	minecraftVsn := pack.manifest.Path("minecraft.version").Data().(string)
-	forgeVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
-	forgeVsn = strings.TrimPrefix(forgeVsn, "forge-")
+	loaderVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
+	loaderVsn = strings.TrimPrefix(loaderVsn, pack.modLoader + "-")
 
-	_, err := installServerForge(minecraftVsn, forgeVsn, pack.gamePath())
+	var err error
+	if pack.modLoader == "fabric" {
+		err = installServerFabric(minecraftVsn, loaderVsn, pack.gamePath())
+	} else {
+		err = installServerForge(minecraftVsn, loaderVsn, pack.gamePath())
+	}
+
 	if err != nil {
-		return fmt.Errorf("failed to install forge: %+v", err)
+		return fmt.Errorf("failed to install %s loader: %+v", pack.modLoader, err)
 	}
 
 	return nil

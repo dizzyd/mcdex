@@ -67,13 +67,14 @@ func (fc forgeContext) isForgeInstalled() bool {
 	return false
 }
 
-func installServerForge(minecraftVsn, forgeVsn, targetDir string) (string, error) {
-	return installForge(forgeContext{
+func installServerForge(minecraftVsn, forgeVsn, targetDir string) error {
+	_, err := installForge(forgeContext{
 		baseDir:      targetDir,
 		minecraftVsn: minecraftVsn,
 		forgeVsn:     forgeVsn,
 		isClient:     false,
 	})
+	return err
 }
 
 func installClientForge(minecraftVsn, forgeVsn string) (string, error) {
@@ -401,6 +402,7 @@ func downloadXzPack(url, filename string) error {
 	return nil
 }
 
+// TODO - why not use downloadHttpFile??
 func downloadJar(url, filename string) error {
 	dir := filepath.Dir(filename)
 	filename = filepath.Base(filename)

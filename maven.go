@@ -96,6 +96,12 @@ func (m MavenModule) toRepositoryPath(repo string) (string, error) {
 	return urlJoin(repo, groupPath, m.artifactId, m.version, filename)
 }
 
+func (m MavenModule) toVersionPath(repo string, version string, extension string) (string, error) {
+	m.version = version
+	m.extension = extension
+	return m.toRepositoryPath(repo)
+}
+
 func (m MavenModule) loadMetadata(repo string) (MavenMetadata, error) {
 	groupPath := path.Join(strings.Split(m.groupId, ".")...)
 	metadataUrl, err := urlJoin(repo, groupPath, m.artifactId, "maven-metadata.xml")

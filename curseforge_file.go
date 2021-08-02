@@ -34,9 +34,9 @@ type CurseForgeModFile struct {
 
 func SelectCurseForgeModFile(pack *ModPack, mod string, url string, clientOnly bool) error {
 	// Try to find the project ID using the mod name as a slug
-	projectID, err := pack.db.findModBySlug(mod)
+	projectID, err := pack.db.findModBySlug(mod, pack.modLoader)
 	if err != nil {
-		return fmt.Errorf("unknown mod %s", mod)
+		return fmt.Errorf("unknown mod %s: %+v", mod, err)
 	}
 
 	// Look up the slug, name and description
@@ -47,7 +47,7 @@ func SelectCurseForgeModFile(pack *ModPack, mod string, url string, clientOnly b
 
 	// Setup a mod file entry and then pull the latest file info
 	modFile := CurseForgeModFile{projectID: projectID, desc: desc, name: name, clientOnly: clientOnly}
-	fileId, err := modFile.getLatestFile(pack.minecraftVersion())
+	fileId, err := modFile.getLatestFile(pack.minecraftVersion(), pack.modLoader)
 	if err != nil {
 		return fmt.Errorf("failed to get latest file for %s (%d): %+v", mod, projectID, err)
 	}
@@ -114,7 +114,7 @@ func (f CurseForgeModFile) install(pack *ModPack) error {
 }
 
 func (f *CurseForgeModFile) update(pack *ModPack) (bool, error) {
-	latestFile, err := f.getLatestFile(pack.minecraftVersion())
+	latestFile, err := f.getLatestFile(pack.minecraftVersion(), pack.modLoader)
 	if err != nil {
 		return false, err
 	}
@@ -153,7 +153,7 @@ func (f CurseForgeModFile) toJson() map[string]interface{} {
 	return result
 }
 
-func (f CurseForgeModFile) getLatestFile(minecraftVersion string) (int, error) {
+func (f CurseForgeModFile) getLatestFile(minecraftVersion string, modLoader string) (int, error) {
 	// Pull the project's descriptor, which has a list of the latest files for each version of Minecraft
 	projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", f.projectID)
 	project, err := getJSONFromURL(projectUrl)
@@ -169,9 +169,18 @@ func (f CurseForgeModFile) getLatestFile(minecraftVersion string) (int, error) {
 	for _, file := range files {
 		fileType, _ := intValue(file, "fileType") // 1 = release, 2 = beta, 3 = alpha
 		fileId, _ := intValue(file, "projectFileId")
+		modLoaderId, _ := intValue(file, "modLoader")
 		targetVsn := file.Path("gameVersion").Data().(string)
 
 		if targetVsn != minecraftVersion {
+			continue
+		}
+
+		if modLoaderId == 1 && modLoader != "forge" {
+			continue
+		}
+
+		if modLoaderId == 4 && modLoader != "fabric" {
 			continue
 		}
 
@@ -188,4 +197,54 @@ func (f CurseForgeModFile) getLatestFile(minecraftVersion string) (int, error) {
 
 	// TODO: Pull file descriptor and check for deps
 	return selectedFileId, nil
+}
+
+func printCurseForgeModInfo(projectId int) error {
+	// Pull the project's descriptor, which has a list of the latest files for each version of Minecraft
+	projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", projectId)
+	project, err := getJSONFromURL(projectUrl)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve project %d: %+v", projectId, err)
+	}
+
+	name, _ := strValue(project, "name")
+	slug, _ := strValue(project, "slug")
+	summary, _ := strValue(project, "summary")
+
+	fmt.Printf("%s (%s)\n  %s\nFiles:\n", name, slug, summary)
+
+	// List recent files
+	files, _ := project.Path("gameVersionLatestFiles").Children()
+	for _, file := range files {
+		filename, _ := strValue(file, "projectFileName")
+		fileType, _ := intValue(file, "fileType") // 1 = release, 2 = beta, 3 = alpha
+		modLoaderId, _ := intValue(file, "modLoader") // 1 == forge, 4 == fabric
+		targetVsn, _ := strValue(file, "gameVersion")
+
+		var releaseType string
+		switch fileType {
+		case 1:
+			releaseType = "release"
+		case 2:
+			releaseType = "beta"
+		case 3:
+			releaseType = "alpha"
+		default:
+			releaseType = "unknown-release"
+		}
+
+		var modLoader string
+		switch modLoaderId {
+		case 1:
+			modLoader = "forge"
+		case 4:
+			modLoader = "fabric"
+		default:
+			modLoader = "forge"
+		}
+
+		fmt.Printf("* %s for Minecraft %s, %s, %s\n", filename, targetVsn, modLoader, releaseType)
+	}
+
+	return nil;
 }

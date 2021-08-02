@@ -50,8 +50,8 @@ var gCommands = map[string]command{
 	"pack.create": {
 		Fn:        cmdPackCreate,
 		Desc:      "Create a new mod pack",
-		ArgsCount: 2,
-		Args:      "<directory/name> <minecraft version> [<forge version>]",
+		ArgsCount: 3,
+		Args:      "<directory/name> fabric|forge <minecraft version>",
 	},
 	"pack.list": {
 		Fn:        cmdPackList,
@@ -81,6 +81,12 @@ var gCommands = map[string]command{
 		Desc:      "List mods matching a name and Minecraft version",
 		ArgsCount: 0,
 		Args:      "[<mod name> <minecraft version>]",
+	},
+	"mod.info": {
+		Fn: cmdModInfo,
+		Desc: "Display information about a mod",
+		ArgsCount: 1,
+		Args: "<mod slug>",
 	},
 	"mod.list.latest": {
 		Fn:        cmdModListLatest,
@@ -127,35 +133,25 @@ var gCommands = map[string]command{
 
 func cmdPackCreate() error {
 	dir := flag.Arg(1)
-	minecraftVsn := flag.Arg(2)
-	forgeVsn := flag.Arg(3)
+	loader := flag.Arg(2)
+	minecraftVsn := flag.Arg(3)
 
 	if dir == NamePlaceholder {
 		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", NamePlaceholder)
 	}
 
-	// If no forge version was specified, open the database and find
-	// a recommended one
-	if forgeVsn == "" {
-		db, err := OpenDatabase()
-		if err != nil {
-			return err
-		}
-
-		forgeVsn, err = db.lookupForgeVsn(minecraftVsn)
-		if err != nil {
-			return err
-		}
+	if loader != "fabric" && loader != "forge" {
+		return fmt.Errorf("'%s' is not a valid loader; it must either be 'fabric' or 'forge'", loader)
 	}
 
 	// Create a new pack directory
-	cp, err := NewModPack(dir, false, ARG_MMC)
+	cp, err := NewModPack(dir, loader, false, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	// Create the manifest for this new pack
-	err = cp.createManifest(cp.name, minecraftVsn, forgeVsn)
+	err = cp.createManifest(cp.name, minecraftVsn)
 	if err != nil {
 		return err
 	}
@@ -187,17 +183,15 @@ func cmdPackInstall() error {
 		return err
 	}
 
-	if dir != "" && !strings.HasPrefix(url, "https://") {
+	if url != "" && !strings.HasPrefix(url, "https://") {
 		url, err = db.getLatestPackURL(dir)
 		if err != nil {
 			return err
 		}
 	}
 
-	// Only require a manifest if we're not installing from a URL
-	requireManifest := url == ""
-
-	cp, err := NewModPack(dir, requireManifest, ARG_MMC)
+	// TODO: review for how this works with downloaded packs
+	cp, err := OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -285,7 +279,7 @@ var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
 func _modSelect(dir, modId, url string, clientOnly bool) error {
 	// Try to open the mod pack
-	cp, err := NewModPack(dir, true, ARG_MMC)
+	cp, err := OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -301,6 +295,23 @@ func _modSelect(dir, modId, url string, clientOnly bool) error {
 	}
 
 	return cp.saveManifest()
+}
+
+func cmdModInfo() error {
+	slug := flag.Arg(1)
+
+	db, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	// Lookup the project ID from the slug; use the modloader wildcard so we'll get all the projects,
+	projectId, err := db.findProjectBySlug(slug, "fabric+forge", 0)
+	if err != nil {
+		return err
+	}
+
+	return printCurseForgeModInfo(projectId)
 }
 
 func listProjects(ptype int) error {
@@ -345,7 +356,7 @@ func cmdPackListLatest() error {
 func cmdModUpdateAll() error {
 	dir := flag.Arg(1)
 
-	cp, err := NewModPack(dir, true, ARG_MMC)
+	cp, err := OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -378,7 +389,7 @@ func cmdServerInstall() error {
 
 	// Open the pack; we require the manifest and any
 	// config files to already be present
-	cp, err := NewModPack(dir, true, false)
+	cp, err := OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}

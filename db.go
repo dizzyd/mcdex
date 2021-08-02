@@ -68,13 +68,13 @@ func InstallDatabase(skipIfExists bool) error {
 	}
 
 	// Get the latest version
-	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v5")
+	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v6")
 	if err != nil {
 		return err
 	}
 
 	// Download the latest data file to mcdex/mcdex.dat
-	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v5-%s.dat.bz2", version)
+	url := fmt.Sprintf("http://files.mcdex.net/data/mcdex-v6-%s.dat.bz2", version)
 	res, err := HttpGet(url)
 	if err != nil {
 		return fmt.Errorf("Failed to retrieve %s data file: %+v", version, err)
@@ -156,16 +156,17 @@ func (db *Database) lookupForgeVsn(mcvsn string) (string, error) {
 	return forgeVsn, nil
 }
 
-func (db *Database) lookupMcVsn(forgeVsn string) (string, error) {
-	var mcVsn string
-	err := db.sqlDb.QueryRow("select mcvsn from forge where version = ?", forgeVsn).Scan(&mcVsn)
+func (db *Database) lookupFabricVsn(mcvsn string) (string, error) {
+	var fabricVsn string
+	err := db.sqlDb.QueryRow("SELECT version FROM fabric_loaders WHERE mcversion = ?", mcvsn).Scan((&fabricVsn))
 	switch {
 	case err == sql.ErrNoRows:
-		return "", fmt.Errorf("No Minecraft version found for %s", mcVsn)
+		return "", fmt.Errorf("No Fabric version found for %s", mcvsn)
 	case err != nil:
 		return "", err
 	}
-	return mcVsn, nil
+
+	return fabricVsn, nil
 }
 
 func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
@@ -232,15 +233,21 @@ func (db *Database) getLatestFileTstamp() (int, error) {
 	return tstamp, err
 }
 
-func (db *Database) findProjectBySlug(slug string, ptype int) (int, error) {
+func (db *Database) findProjectBySlug(slug string, modLoader string, ptype int) (int, error) {
 	var modID int
-	err := db.sqlDb.QueryRow("select projectid from projects where type = ? and slug = ?", ptype, slug).Scan(&modID)
+	var supportedModLoader string
+	err := db.sqlDb.QueryRow("select projectid, modloader from projects where type = ? and slug = ?", ptype, slug).Scan(&modID, &supportedModLoader)
 	switch {
 	case err == sql.ErrNoRows:
-		return -1, fmt.Errorf("No mod found %s", slug)
+		return -1, fmt.Errorf("no mod found %s", slug)
 	case err != nil:
 		return -1, err
 	}
+
+	if  modLoader != supportedModLoader && modLoader != "fabric+forge" && supportedModLoader != "fabric+forge" {
+		return -1, fmt.Errorf("%s (%s) is not compatible with %s", slug, supportedModLoader, modLoader)
+	}
+
 	return modID, nil
 }
 
@@ -256,8 +263,8 @@ func (db *Database) findSlugByProject(id int) (string, error) {
 	return slug, nil
 }
 
-func (db *Database) findModBySlug(slug string) (int, error) {
-	return db.findProjectBySlug(slug, 0)
+func (db *Database) findModBySlug(slug string, modLoader string) (int, error) {
+	return db.findProjectBySlug(slug, modLoader, 0)
 }
 
 func (db *Database) findModByName(name string) (int, error) {
@@ -281,6 +288,7 @@ func (db *Database) getProjectInfo(projectID int) (string, string, string, error
 
 	return slug, name, desc, nil
 }
+
 
 func (db *Database) getDeps(fileID int) ([]string, error) {
 	var result []string
@@ -316,7 +324,8 @@ func (db *Database) getDeps(fileID int) ([]string, error) {
 
 func (db *Database) getLatestPackURL(slug string) (string, error) {
 	// First try to find the pack by looking for the specific slug
-	pid, err := db.findProjectBySlug(slug, 1)
+	// TODO: Remove forge
+	pid, err := db.findProjectBySlug(slug, "forge",1)
 	if err != nil {
 		return "", err
 	}

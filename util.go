@@ -319,6 +319,16 @@ func intValue(c *gabs.Container, path string) (int, error) {
 	}
 }
 
+func strValue(c *gabs.Container, path string) (string, error) {
+	data := c.Path(path).Data()
+	switch v := data.(type) {
+	case string:
+		return v, nil
+	default:
+		return "", fmt.Errorf("Invalid type for %s: %+v", path, data)
+	}
+}
+
 func hasAnyPrefix(url string, prefixes ...string) bool {
 	for _, p := range prefixes {
 		if strings.HasPrefix(url, p) {
