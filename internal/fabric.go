@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type fabricContext struct {
 
 func installClientFabric(minecraftVsn, fabricVsn string) (string, error) {
 	ctx := fabricContext{
-		baseDir: env().MinecraftDir,
+		baseDir:      Env().MinecraftDir,
 		minecraftVsn: minecraftVsn,
 		fabricVsn:    fabricVsn,
 		isClient:     true,
@@ -88,9 +88,10 @@ func(ctx fabricContext) installFabric() (string, error) {
 	// TODO: Investigate if we need to set the path in which to execute installer
 	logAction("Running fabric installer for %s\n", ctx.fabricId())
 	cmd := exec.Command(javaCmd(), args...)
-	if ARG_VERBOSE {
-		fmt.Printf("Fabric installer command: %s\n", cmd.String())
-	}
+	// TODO: Convert to log.debug
+	//if ARG_VERBOSE {
+	//	fmt.Printf("Fabric installer command: %s\n", cmd.String())
+	//}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("%s\n", out)

@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"archive/zip"
@@ -39,7 +39,7 @@ var VALID_URL_PREFIXES = []string{
 
 // ModPack is a directory, manifest and other components that represent a pack
 type ModPack struct {
-	name     string
+	Name     string
 	rootPath string
 	gameDir  string
 	modDir   string
@@ -87,9 +87,9 @@ func NewModPack(dir string, modLoader string, requireManifest bool, enableMultiM
 	// Initialize path & name
 	if filepath.IsAbs(dir) {
 		pack.rootPath = dir
-		pack.name = filepath.Base(dir)
+		pack.Name = filepath.Base(dir)
 	} else if enableMultiMC {
-		pack.name = dir
+		pack.Name = dir
 		if mmcDir, err := _mmcInstancesDir(); err == nil {
 			pack.rootPath = filepath.Join(mmcDir, dir)
 		} else {
@@ -97,14 +97,14 @@ func NewModPack(dir string, modLoader string, requireManifest bool, enableMultiM
 		}
 	} else if dir == "." {
 		pack.rootPath, _ = os.Getwd()
-		pack.name = filepath.Base(pack.rootPath)
+		pack.Name = filepath.Base(pack.rootPath)
 	} else {
-		pack.rootPath = filepath.Join(env().McdexDir, "pack", dir)
-		pack.name = dir
+		pack.rootPath = filepath.Join(Env().McdexDir, "pack", dir)
+		pack.Name = dir
 	}
 
 	// Use a temp directory until manifest is downloaded
-	if pack.name == NamePlaceholder && !requireManifest {
+	if pack.Name == NamePlaceholder && !requireManifest {
 		pack.rootPath, _ = ioutil.TempDir(filepath.Dir(pack.rootPath), "mcdex-")
 	}
 
@@ -154,7 +154,7 @@ func NewModPack(dir string, modLoader string, requireManifest bool, enableMultiM
 	return pack, nil
 }
 
-func (pack *ModPack) download(url string) error {
+func (pack *ModPack) Download(url string) error {
 	// Check for a pack.url file; we use this to track where the pack
 	// file came from so that we can re-download the pack when it changes.
 	// This supports the use case of installing v 1.0.x of a pack and then updating
@@ -184,7 +184,7 @@ func (pack *ModPack) download(url string) error {
 	// Start the download
 	resp, err := HttpGet(url)
 	if err != nil {
-		return fmt.Errorf("Failed to download %s: %+v", pack.name, err)
+		return fmt.Errorf("Failed to download %s: %+v", pack.Name, err)
 	}
 	defer resp.Body.Close()
 
@@ -198,7 +198,7 @@ func (pack *ModPack) download(url string) error {
 	return writeStringFile(packURLFile, url)
 }
 
-func (pack *ModPack) processManifest() error {
+func (pack *ModPack) ProcessManifest() error {
 	// Open the pack.zip and parse the manifest
 	zipFile, err := zip.OpenReader(filepath.Join(pack.gamePath(), "pack.zip"))
 	if err != nil {
@@ -223,7 +223,7 @@ func (pack *ModPack) processManifest() error {
 		return fmt.Errorf("unexpected manifest type: %s", mtype)
 	}
 
-	if pack.name == NamePlaceholder {
+	if pack.Name == NamePlaceholder {
 		baseName := pack.fullName()
 		name := baseName
 		for i := 1; dirExists(filepath.Join(filepath.Dir(pack.rootPath), name)); i++ {
@@ -235,18 +235,18 @@ func (pack *ModPack) processManifest() error {
 			fmt.Printf("Unable to install to %q, will remain in temp directory %q:\n\t%+v\n", name, filepath.Base(pack.rootPath), err)
 		} else {
 			pack.rootPath = newRoot
-			pack.name = name
+			pack.Name = name
 		}
 	}
 
-	return pack.saveManifest()
+	return pack.SaveManifest()
 }
 
 func (pack *ModPack) minecraftVersion() string {
 	return pack.manifest.Path("minecraft.version").Data().(string)
 }
 
-func (pack *ModPack) createManifest(name, minecraftVsn string) error {
+func (pack *ModPack) CreateManifest(name, minecraftVsn string) error {
 	// Create the manifest and set basic info
 	pack.manifest = gabs.New()
 	pack.manifest.SetP(minecraftVsn, "minecraft.version")
@@ -276,7 +276,7 @@ func (pack *ModPack) createManifest(name, minecraftVsn string) error {
 	pack.manifest.Path("minecraft.modLoaders").SetIndex(loader, 0)
 
 	// Write the manifest file
-	err = pack.saveManifest()
+	err = pack.SaveManifest()
 	if err != nil {
 		return fmt.Errorf("failed to save manifest.json: %+v", err)
 	}
@@ -291,7 +291,7 @@ func (pack *ModPack) getVersions() (string, string) {
 	return minecraftVsn, loaderVsn
 }
 
-func (pack *ModPack) createLauncherProfile() error {
+func (pack *ModPack) CreateLauncherProfile() error {
 	// Using manifest config version + mod loader, look for an installed
 	// version of forge|fabric with the appropriate version
 	minecraftVsn, loaderVsn := pack.getVersions()
@@ -322,8 +322,8 @@ func (pack *ModPack) createLauncherProfile() error {
 		return fmt.Errorf("failed to load launcher_profiles.json: %+v", err)
 	}
 
-	fmt.Printf("Creating profile: %s\n", pack.name)
-	err = lc.createProfile(pack.name, loaderId, pack.gamePath(), javaArgs)
+	fmt.Printf("Creating profile: %s\n", pack.Name)
+	err = lc.createProfile(pack.Name, loaderId, pack.gamePath(), javaArgs)
 	if err != nil {
 		return fmt.Errorf("failed to create profile: %+v", err)
 	}
@@ -336,7 +336,7 @@ func (pack *ModPack) createLauncherProfile() error {
 	return nil
 }
 
-func (pack *ModPack) installMods(isClient bool) error {
+func (pack *ModPack) InstallMods(isClient bool) error {
 	// Make sure mods directory already exists
 	os.MkdirAll(pack.modPath(), 0700)
 
@@ -386,10 +386,10 @@ func (pack *ModPack) selectMod(modFile ModPackFile) error {
 	}
 
 	fmt.Printf("Registering: %s\n", modFile.getName())
-	return pack.saveManifest()
+	return pack.SaveManifest()
 }
 
-func (pack *ModPack) updateMods(dryRun bool) error {
+func (pack *ModPack) UpdateMods(dryRun bool) error {
 	// Walk over each file, looking for a more recent file ID for the
 	// appropriate version
 	files, _ := pack.manifest.S("files").Children()
@@ -420,12 +420,12 @@ func (pack *ModPack) updateMods(dryRun bool) error {
 	}
 
 	if !dryRun {
-		return pack.saveManifest()
+		return pack.SaveManifest()
 	}
 	return nil
 }
 
-func (pack *ModPack) saveManifest() error {
+func (pack *ModPack) SaveManifest() error {
 	// Write the manifest file
 	err := writeJSON(pack.manifest, filepath.Join(pack.gamePath(), "manifest.json"))
 	if err != nil {
@@ -444,7 +444,7 @@ func (pack *ModPack) loadManifest() error {
 	return nil
 }
 
-func (pack *ModPack) installOverrides() error {
+func (pack *ModPack) InstallOverrides() error {
 	// Open the pack.zip
 	zipFile, err := zip.OpenReader(filepath.Join(pack.gamePath(), "pack.zip"))
 	if err != nil {
@@ -482,7 +482,7 @@ func (pack *ModPack) installOverrides() error {
 	return nil
 }
 
-func (pack *ModPack) installServer() error {
+func (pack *ModPack) InstallServer() error {
 	// Get the minecraft + forge versions from manifest
 	minecraftVsn := pack.manifest.Path("minecraft.version").Data().(string)
 	loaderVsn := pack.manifest.Path("minecraft.modLoaders.id").Index(0).Data().(string)
@@ -502,7 +502,7 @@ func (pack *ModPack) installServer() error {
 	return nil
 }
 
-func (pack *ModPack) generateMMCConfig() error {
+func (pack *ModPack) GenerateMMCConfig() error {
 	return generateMMCConfig(pack)
 }
 

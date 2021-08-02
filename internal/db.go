@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"compress/bzip2"
@@ -46,7 +46,7 @@ func OpenDatabase() (*Database, error) {
 		return nil, fmt.Errorf("Database not available; try using db.update command")
 	}
 
-	db.sqlDbPath = filepath.Join(env().McdexDir, "mcdex.dat")
+	db.sqlDbPath = filepath.Join(Env().McdexDir, "mcdex.dat")
 	sqlDb, err := sql.Open("sqlite3", db.sqlDbPath)
 	if err != nil {
 		return nil, err
@@ -63,12 +63,12 @@ func OpenDatabase() (*Database, error) {
 }
 
 func InstallDatabase(skipIfExists bool) error {
-	if skipIfExists && fileExists(filepath.Join(env().McdexDir, "mcdex.dat")) {
+	if skipIfExists && fileExists(filepath.Join(Env().McdexDir, "mcdex.dat")) {
 		return nil
 	}
 
 	// Get the latest version
-	version, err := readStringFromUrl("http://files.mcdex.net/data/latest.v6")
+	version, err := ReadStringFromUrl("http://files.mcdex.net/data/latest.v6")
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func InstallDatabase(skipIfExists bool) error {
 	defer res.Body.Close()
 
 	// Stream the data file to mcdex.dat.tmp
-	tmpFileName := filepath.Join(env().McdexDir, "mcdex.dat.tmp")
+	tmpFileName := filepath.Join(Env().McdexDir, "mcdex.dat.tmp")
 	err = writeStream(tmpFileName, bzip2.NewReader(res.Body))
 	if err != nil {
 		return err
@@ -106,14 +106,14 @@ func InstallDatabase(skipIfExists bool) error {
 	tmpDb.Close()
 
 	// Close the database and rename the tmp file
-	err = os.Rename(tmpFileName, filepath.Join(env().McdexDir, "mcdex.dat"))
+	err = os.Rename(tmpFileName, filepath.Join(Env().McdexDir, "mcdex.dat"))
 	if err != nil {
 		return fmt.Errorf("Failed to rename mcdex.dat.tmp: %+v", err)
 	}
 	return nil
 }
 
-func (db *Database) listForge(mcvsn string, verbose bool) error {
+func (db *Database) ListForge(mcvsn string, verbose bool) error {
 	rows, err := db.sqlDb.Query("select version, isrec from forge where mcvsn = ? order by version desc", mcvsn)
 	switch {
 	case err == sql.ErrNoRows:
@@ -169,7 +169,7 @@ func (db *Database) lookupFabricVsn(mcvsn string) (string, error) {
 	return fabricVsn, nil
 }
 
-func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
+func (db *Database) PrintProjects(slug, mcvsn string, ptype int) error {
 	// Turn the name into a pre-compiled regex
 	slugRegex, err := regexp.Compile("(?i)" + slug)
 	if err != nil {
@@ -204,7 +204,7 @@ func (db *Database) printProjects(slug, mcvsn string, ptype int) error {
 	return nil
 }
 
-func (db *Database) printLatestProjects(mcvsn string, ptype int) error {
+func (db *Database) PrintLatestProjects(mcvsn string, ptype int) error {
 	rows, err := db.sqlDb.Query(`select slug, description from projects 
 									    where type = ? and projectid in 
 									    (select projectid from files order by tstamp desc) limit 100`, ptype)
@@ -227,13 +227,13 @@ func (db *Database) printLatestProjects(mcvsn string, ptype int) error {
 	return nil
 }
 
-func (db *Database) getLatestFileTstamp() (int, error) {
+func (db *Database) GetLatestFileTstamp() (int, error) {
 	var tstamp int
 	err := db.sqlDb.QueryRow("select value from meta where key = 'dbtunix'").Scan(&tstamp)
 	return tstamp, err
 }
 
-func (db *Database) findProjectBySlug(slug string, modLoader string, ptype int) (int, error) {
+func (db *Database) FindProjectBySlug(slug string, modLoader string, ptype int) (int, error) {
 	var modID int
 	var supportedModLoader string
 	err := db.sqlDb.QueryRow("select projectid, modloader from projects where type = ? and slug = ?", ptype, slug).Scan(&modID, &supportedModLoader)
@@ -264,7 +264,7 @@ func (db *Database) findSlugByProject(id int) (string, error) {
 }
 
 func (db *Database) findModBySlug(slug string, modLoader string) (int, error) {
-	return db.findProjectBySlug(slug, modLoader, 0)
+	return db.FindProjectBySlug(slug, modLoader, 0)
 }
 
 func (db *Database) findModByName(name string) (int, error) {
@@ -322,10 +322,10 @@ func (db *Database) getDeps(fileID int) ([]string, error) {
 	return result, nil
 }
 
-func (db *Database) getLatestPackURL(slug string) (string, error) {
+func (db *Database) GetLatestPackURL(slug string) (string, error) {
 	// First try to find the pack by looking for the specific slug
 	// TODO: Remove forge
-	pid, err := db.findProjectBySlug(slug, "forge",1)
+	pid, err := db.FindProjectBySlug(slug, "forge",1)
 	if err != nil {
 		return "", err
 	}

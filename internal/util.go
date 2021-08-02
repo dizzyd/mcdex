@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"archive/zip"
@@ -209,7 +209,7 @@ func dirExists(dirname string) bool {
 	return err == nil && stat.IsDir()
 }
 
-func readStringFromUrl(url string) (string, error) {
+func ReadStringFromUrl(url string) (string, error) {
 	res, err := HttpGet(url)
 	if err != nil {
 		return "", fmt.Errorf("Failed to read string from %s: %+v", url, err)

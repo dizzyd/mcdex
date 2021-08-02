@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"fmt"
@@ -199,7 +199,7 @@ func (f CurseForgeModFile) getLatestFile(minecraftVersion string, modLoader stri
 	return selectedFileId, nil
 }
 
-func printCurseForgeModInfo(projectId int) error {
+func PrintCurseForgeModInfo(projectId int) error {
 	// Pull the project's descriptor, which has a list of the latest files for each version of Minecraft
 	projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", projectId)
 	project, err := getJSONFromURL(projectUrl)

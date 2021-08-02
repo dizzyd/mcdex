@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"fmt"
@@ -79,7 +79,7 @@ func installServerForge(minecraftVsn, forgeVsn, targetDir string) error {
 
 func installClientForge(minecraftVsn, forgeVsn string) (string, error) {
 	return installForge(forgeContext{
-		baseDir:      env().MinecraftDir,
+		baseDir:      Env().MinecraftDir,
 		minecraftVsn: minecraftVsn,
 		forgeVsn:     forgeVsn,
 		isClient:     true,
@@ -461,9 +461,10 @@ func invokeUnpack200(libDir, libName string) error {
 func invokeProcessor(name string, args []string) error {
 	logAction("Running processor %s...\n", name)
 	cmd := exec.Command(javaCmd(), args...)
-	if ARG_VERBOSE {
-		fmt.Printf("Processor command: %s\n", cmd.String())
-	}
+	// TODO: Convert to log.debug
+	//if ARG_VERBOSE {
+	//	fmt.Printf("Processor command: %s\n", cmd.String())
+	//}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		fmt.Printf("%s\n", out)

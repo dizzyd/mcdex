@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"encoding/xml"
@@ -109,7 +109,7 @@ func (m MavenModule) loadMetadata(repo string) (MavenMetadata, error) {
 		return MavenMetadata{}, err
 	}
 
-	metadataXml, err := readStringFromUrl(metadataUrl)
+	metadataXml, err := ReadStringFromUrl(metadataUrl)
 	if err != nil {
 		return MavenMetadata{}, fmt.Errorf("unable to retrieve %s: %+v", metadataUrl, err)
 	}

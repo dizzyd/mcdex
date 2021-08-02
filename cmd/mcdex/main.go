@@ -1,6 +1,6 @@
 // ***************************************************************************
 //
-//  Copyright 2017 David (Dizzy) Smith, dizzyd@dizzyd.com
+//  Copyright 2017-2021 David (Dizzy) Smith, dizzyd@dizzyd.com
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/xeonx/timeago"
+	"mcdex/internal"
 )
 
 var version string
@@ -67,7 +68,7 @@ var gCommands = map[string]command{
 	},
 	"pack.install": {
 		Fn:        cmdPackInstall,
-		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", NamePlaceholder),
+		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", internal.NamePlaceholder),
 		ArgsCount: 1,
 		Args:      "<directory/name> [<url>]",
 	},
@@ -136,8 +137,8 @@ func cmdPackCreate() error {
 	loader := flag.Arg(2)
 	minecraftVsn := flag.Arg(3)
 
-	if dir == NamePlaceholder {
-		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", NamePlaceholder)
+	if dir == internal.NamePlaceholder {
+		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", internal.NamePlaceholder)
 	}
 
 	if loader != "fabric" && loader != "forge" {
@@ -145,13 +146,13 @@ func cmdPackCreate() error {
 	}
 
 	// Create a new pack directory
-	cp, err := NewModPack(dir, loader, false, ARG_MMC)
+	cp, err := internal.NewModPack(dir, loader, false, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	// Create the manifest for this new pack
-	err = cp.createManifest(cp.name, minecraftVsn)
+	err = cp.CreateManifest(cp.Name, minecraftVsn)
 	if err != nil {
 		return err
 	}
@@ -159,13 +160,13 @@ func cmdPackCreate() error {
 	// If the -mmc flag is provided, don't create a launcher profile; just generate
 	// an instance.cfg for MultiMC to use
 	if ARG_MMC {
-		err = cp.generateMMCConfig()
+		err = cp.GenerateMMCConfig()
 		if err != nil {
 			return err
 		}
 	} else {
 		// Create launcher profile
-		err = cp.createLauncherProfile()
+		err = cp.CreateLauncherProfile()
 		if err != nil {
 			return err
 		}
@@ -178,33 +179,33 @@ func cmdPackInstall() error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
 
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
 	if url != "" && !strings.HasPrefix(url, "https://") {
-		url, err = db.getLatestPackURL(dir)
+		url, err = db.GetLatestPackURL(dir)
 		if err != nil {
 			return err
 		}
 	}
 
 	// TODO: review for how this works with downloaded packs
-	cp, err := OpenModPack(dir, ARG_MMC)
+	cp, err := internal.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	if url != "" {
 		// Download the pack
-		err = cp.download(url)
+		err = cp.Download(url)
 		if err != nil {
 			return err
 		}
 
 		// Process manifest
-		err = cp.processManifest()
+		err = cp.ProcessManifest()
 		if err != nil {
 			return err
 		}
@@ -212,7 +213,7 @@ func cmdPackInstall() error {
 		// Install overrides from the modpack; this is a bit of a misnomer since
 		// under usual circumstances there are no mods in the modpack file that
 		// will be also be downloaded
-		err = cp.installOverrides()
+		err = cp.InstallOverrides()
 		if err != nil {
 			return err
 		}
@@ -221,13 +222,13 @@ func cmdPackInstall() error {
 	// If the -mmc flag is provided, don't create a launcher profile; just generate
 	// an instance.cfg for MultiMC to use
 	if ARG_MMC == true {
-		err = cp.generateMMCConfig()
+		err = cp.GenerateMMCConfig()
 		if err != nil {
 			return err
 		}
 	} else {
 		// Create launcher profile
-		err = cp.createLauncherProfile()
+		err = cp.CreateLauncherProfile()
 		if err != nil {
 			return err
 		}
@@ -235,7 +236,7 @@ func cmdPackInstall() error {
 
 	if ARG_SKIPMODS == false {
 		// Install mods (include client-side only mods)
-		err = cp.installMods(true)
+		err = cp.InstallMods(true)
 		if err != nil {
 			return err
 		}
@@ -246,7 +247,7 @@ func cmdPackInstall() error {
 
 func cmdInfo() error {
 	// Try to retrieve the latest available version info
-	publishedVsn, err := readStringFromUrl("http://files.mcdex.net/release/latest")
+	publishedVsn, err := internal.ReadStringFromUrl("http://files.mcdex.net/release/latest")
 
 	if err != nil && ARG_VERBOSE {
 		fmt.Printf("%s\n", err)
@@ -260,10 +261,10 @@ func cmdInfo() error {
 
 	// Print the environment
 	fmt.Printf("Environment:\n")
-	fmt.Printf("* Minecraft dir: %s\n", env().MinecraftDir)
-	fmt.Printf("* MultiMC dir: %s\n", env().MultiMCDir)
-	fmt.Printf("* mcdex dir: %s\n", env().McdexDir)
-	fmt.Printf("* Java dir: %s\n", env().JavaDir)
+	fmt.Printf("* Minecraft dir: %s\n", internal.Env().MinecraftDir)
+	fmt.Printf("* MultiMC dir: %s\n", internal.Env().MultiMCDir)
+	fmt.Printf("* mcdex dir: %s\n", internal.Env().McdexDir)
+	fmt.Printf("* Java dir: %s\n", internal.Env().JavaDir)
 	return nil
 }
 
@@ -279,51 +280,51 @@ var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
 func _modSelect(dir, modId, url string, clientOnly bool) error {
 	// Try to open the mod pack
-	cp, err := OpenModPack(dir, ARG_MMC)
+	cp, err := internal.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	// First, try to select the mod using Maven
-	err = SelectMavenModFile(cp, modId, url, clientOnly)
+	err = internal.SelectMavenModFile(cp, modId, url, clientOnly)
 	if err != nil {
 		// Hmm, not a maven-based mod; let's try as a CurseForge mod
-		err = SelectCurseForgeModFile(cp, modId, url, clientOnly)
+		err = internal.SelectCurseForgeModFile(cp, modId, url, clientOnly)
 		if err != nil {
 			return err
 		}
 	}
 
-	return cp.saveManifest()
+	return cp.SaveManifest()
 }
 
 func cmdModInfo() error {
 	slug := flag.Arg(1)
 
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
 	// Lookup the project ID from the slug; use the modloader wildcard so we'll get all the projects,
-	projectId, err := db.findProjectBySlug(slug, "fabric+forge", 0)
+	projectId, err := db.FindProjectBySlug(slug, "fabric+forge", 0)
 	if err != nil {
 		return err
 	}
 
-	return printCurseForgeModInfo(projectId)
+	return internal.PrintCurseForgeModInfo(projectId)
 }
 
 func listProjects(ptype int) error {
 	name := flag.Arg(1)
 	mcvsn := flag.Arg(2)
 
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
-	return db.printProjects(name, mcvsn, ptype)
+	return db.PrintProjects(name, mcvsn, ptype)
 }
 
 func cmdModList() error {
@@ -337,12 +338,12 @@ func cmdPackList() error {
 func listLatestProjects(ptype int) error {
 	mcvsn := flag.Arg(1)
 
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
-	return db.printLatestProjects(mcvsn, ptype)
+	return db.PrintLatestProjects(mcvsn, ptype)
 }
 
 func cmdModListLatest() error {
@@ -356,12 +357,12 @@ func cmdPackListLatest() error {
 func cmdModUpdateAll() error {
 	dir := flag.Arg(1)
 
-	cp, err := OpenModPack(dir, ARG_MMC)
+	cp, err := internal.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
-	err = cp.updateMods(ARG_DRY_RUN)
+	err = cp.UpdateMods(ARG_DRY_RUN)
 	if err != nil {
 		return err
 	}
@@ -372,12 +373,12 @@ func cmdModUpdateAll() error {
 func cmdForgeList() error {
 	mcvsn := flag.Arg(1)
 
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
-	return db.listForge(mcvsn, ARG_VERBOSE)
+	return db.ListForge(mcvsn, ARG_VERBOSE)
 }
 
 func cmdServerInstall() error {
@@ -389,19 +390,19 @@ func cmdServerInstall() error {
 
 	// Open the pack; we require the manifest and any
 	// config files to already be present
-	cp, err := OpenModPack(dir, ARG_MMC)
+	cp, err := internal.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	// Install the server jar, Forge and dependencies
-	err = cp.installServer()
+	err = cp.InstallServer()
 	if err != nil {
 		return err
 	}
 
 	// Make sure all mods are installed (do NOT include client-side only)
-	err = cp.installMods(false)
+	err = cp.InstallMods(false)
 	if err != nil {
 		return err
 	}
@@ -410,18 +411,18 @@ func cmdServerInstall() error {
 }
 
 func cmdDBUpdate() error {
-	err := InstallDatabase(false)
+	err := internal.InstallDatabase(false)
 	if err != nil {
 		return err
 	}
 
 	// Display last updated file in database (simple way to know how recent a file we have)
-	db, err := OpenDatabase()
+	db, err := internal.OpenDatabase()
 	if err != nil {
 		return err
 	}
 
-	tstamp, err := db.getLatestFileTstamp()
+	tstamp, err := db.GetLatestFileTstamp()
 	if err != nil {
 		return err
 	}
@@ -471,7 +472,7 @@ func (v *StrValue) Set(val string) error {
 func main() {
 	mcDir := StrValue{
 		isSet: false,
-		value: _minecraftDir(),
+		value: internal.MinecraftDir(),
 	}
 
 	// Look for MultiMC on the path
@@ -508,11 +509,9 @@ func main() {
 			_ = mcDir.Set(mmcDir)
 		}
 	}
-	envData.MinecraftDir = mcDir.String()
-	envData.MultiMCDir = mmcDir
 
 	// Initialize our environment
-	err := initEnv()
+	err := internal.InitEnv(mcDir.String(), mmcDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize: %s\n", err)
 	}

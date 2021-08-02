@@ -1,4 +1,4 @@
-package main
+package internal
 
 import (
 	"bufio"
@@ -21,11 +21,11 @@ func _mmcInstancesDir() (string, error) {
 	// Default if not found in config file
 	dir := "instances"
 
-	if env().MultiMCDir == "" {
+	if Env().MultiMCDir == "" {
 		return "", errors.New("MultiMC directory is not set")
 	}
 
-	cfg, err := ioutil.ReadFile(filepath.Join(env().MultiMCDir, "multimc.cfg"))
+	cfg, err := ioutil.ReadFile(filepath.Join(Env().MultiMCDir, "multimc.cfg"))
 	if err != nil {
 		return "", err
 	}
@@ -41,7 +41,7 @@ func _mmcInstancesDir() (string, error) {
 	}
 
 	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(env().MultiMCDir, dir)
+		dir = filepath.Join(Env().MultiMCDir, dir)
 	}
 
 	return dir, err

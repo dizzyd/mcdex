@@ -15,7 +15,7 @@
 //   limitations under the License.
 // ***************************************************************************
 
-package main
+package internal
 
 import (
 	"fmt"
@@ -36,7 +36,7 @@ type launcherConfig struct {
 
 func newLauncherConfig() (*launcherConfig, error) {
 	lc := new(launcherConfig)
-	lc.filename = filepath.Join(env().MinecraftDir, "launcher_profiles.json")
+	lc.filename = filepath.Join(Env().MinecraftDir, "launcher_profiles.json")
 	lc.data = gabs.New()
 
 	if fileExists(lc.filename) {
