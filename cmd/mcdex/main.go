@@ -30,7 +30,7 @@ import (
 	"time"
 
 	"github.com/xeonx/timeago"
-	"mcdex/internal"
+	"mcdex/pkg"
 )
 
 var version string
@@ -68,7 +68,7 @@ var gCommands = map[string]command{
 	},
 	"pack.install": {
 		Fn:        cmdPackInstall,
-		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", internal.NamePlaceholder),
+		Desc:      fmt.Sprintf("Install a mod pack, optionally using a URL to download. Use %s for the directory with a URL to use the name from the downloaded manifest", pkg.NamePlaceholder),
 		ArgsCount: 1,
 		Args:      "<directory/name> [<url>]",
 	},
@@ -137,8 +137,8 @@ func cmdPackCreate() error {
 	loader := flag.Arg(2)
 	minecraftVsn := flag.Arg(3)
 
-	if dir == internal.NamePlaceholder {
-		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", internal.NamePlaceholder)
+	if dir == pkg.NamePlaceholder {
+		return fmt.Errorf("%q is not allowed for the directory when creating a new pack", pkg.NamePlaceholder)
 	}
 
 	if loader != "fabric" && loader != "forge" {
@@ -146,7 +146,7 @@ func cmdPackCreate() error {
 	}
 
 	// Create a new pack directory
-	cp, err := internal.NewModPack(dir, loader, false, ARG_MMC)
+	cp, err := pkg.NewModPack(dir, loader, false, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func cmdPackInstall() error {
 	dir := flag.Arg(1)
 	url := flag.Arg(2)
 
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func cmdPackInstall() error {
 	}
 
 	// TODO: review for how this works with downloaded packs
-	cp, err := internal.OpenModPack(dir, ARG_MMC)
+	cp, err := pkg.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func cmdPackInstall() error {
 
 func cmdInfo() error {
 	// Try to retrieve the latest available version info
-	publishedVsn, err := internal.ReadStringFromUrl("http://files.mcdex.net/release/latest")
+	publishedVsn, err := pkg.ReadStringFromUrl("http://files.mcdex.net/release/latest")
 
 	if err != nil && ARG_VERBOSE {
 		fmt.Printf("%s\n", err)
@@ -261,10 +261,10 @@ func cmdInfo() error {
 
 	// Print the environment
 	fmt.Printf("Environment:\n")
-	fmt.Printf("* Minecraft dir: %s\n", internal.Env().MinecraftDir)
-	fmt.Printf("* MultiMC dir: %s\n", internal.Env().MultiMCDir)
-	fmt.Printf("* mcdex dir: %s\n", internal.Env().McdexDir)
-	fmt.Printf("* Java dir: %s\n", internal.Env().JavaDir)
+	fmt.Printf("* Minecraft dir: %s\n", pkg.Env().MinecraftDir)
+	fmt.Printf("* MultiMC dir: %s\n", pkg.Env().MultiMCDir)
+	fmt.Printf("* mcdex dir: %s\n", pkg.Env().McdexDir)
+	fmt.Printf("* Java dir: %s\n", pkg.Env().JavaDir)
 	return nil
 }
 
@@ -280,16 +280,16 @@ var curseForgeRegex = regexp.MustCompile("/projects/([\\w-]*)(/files/(\\d+))?")
 
 func _modSelect(dir, modId, url string, clientOnly bool) error {
 	// Try to open the mod pack
-	cp, err := internal.OpenModPack(dir, ARG_MMC)
+	cp, err := pkg.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
 
 	// First, try to select the mod using Maven
-	err = internal.SelectMavenModFile(cp, modId, url, clientOnly)
+	err = pkg.SelectMavenModFile(cp, modId, url, clientOnly)
 	if err != nil {
 		// Hmm, not a maven-based mod; let's try as a CurseForge mod
-		err = internal.SelectCurseForgeModFile(cp, modId, url, clientOnly)
+		err = pkg.SelectCurseForgeModFile(cp, modId, url, clientOnly)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ func _modSelect(dir, modId, url string, clientOnly bool) error {
 func cmdModInfo() error {
 	slug := flag.Arg(1)
 
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -312,14 +312,14 @@ func cmdModInfo() error {
 		return err
 	}
 
-	return internal.PrintCurseForgeModInfo(projectId)
+	return pkg.PrintCurseForgeModInfo(projectId)
 }
 
 func listProjects(ptype int) error {
 	name := flag.Arg(1)
 	mcvsn := flag.Arg(2)
 
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -338,7 +338,7 @@ func cmdPackList() error {
 func listLatestProjects(ptype int) error {
 	mcvsn := flag.Arg(1)
 
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func cmdPackListLatest() error {
 func cmdModUpdateAll() error {
 	dir := flag.Arg(1)
 
-	cp, err := internal.OpenModPack(dir, ARG_MMC)
+	cp, err := pkg.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func cmdModUpdateAll() error {
 func cmdForgeList() error {
 	mcvsn := flag.Arg(1)
 
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -390,7 +390,7 @@ func cmdServerInstall() error {
 
 	// Open the pack; we require the manifest and any
 	// config files to already be present
-	cp, err := internal.OpenModPack(dir, ARG_MMC)
+	cp, err := pkg.OpenModPack(dir, ARG_MMC)
 	if err != nil {
 		return err
 	}
@@ -411,13 +411,13 @@ func cmdServerInstall() error {
 }
 
 func cmdDBUpdate() error {
-	err := internal.InstallDatabase(false)
+	err := pkg.InstallDatabase(false)
 	if err != nil {
 		return err
 	}
 
 	// Display last updated file in database (simple way to know how recent a file we have)
-	db, err := internal.OpenDatabase()
+	db, err := pkg.OpenDatabase()
 	if err != nil {
 		return err
 	}
@@ -472,7 +472,7 @@ func (v *StrValue) Set(val string) error {
 func main() {
 	mcDir := StrValue{
 		isSet: false,
-		value: internal.MinecraftDir(),
+		value: pkg.MinecraftDir(),
 	}
 
 	// Look for MultiMC on the path
@@ -511,7 +511,7 @@ func main() {
 	}
 
 	// Initialize our environment
-	err := internal.InitEnv(mcDir.String(), mmcDir)
+	err := pkg.InitEnv(mcDir.String(), mmcDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize: %s\n", err)
 	}

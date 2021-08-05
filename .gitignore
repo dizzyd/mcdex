@@ -23,11 +23,6 @@ _testmain.go
 *.test
 *.prof
 
-# Govendor cache
-.cache
-bin
-pkg
-
 src/golang.org
 src/github.com
 
