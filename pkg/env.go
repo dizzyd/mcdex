@@ -37,21 +37,20 @@ type EnvConsts struct {
 var envData EnvConsts
 
 func InitEnv(minecraftDir string, mmcDir string) error {
-	// Get the minecraft directory, based on platform
-	mcDir := minecraftDir
-	if mcDir == "" {
-		mcDir = MinecraftDir()
-		envData.MinecraftDir = mcDir
+	// If no specific minecraft directory is provided, use the platform-appropriate one
+	if minecraftDir == "" {
+		minecraftDir = MinecraftDir()
 	}
-	os.Mkdir(mcDir, 0700)
+	envData.MinecraftDir = minecraftDir
+	os.Mkdir(envData.MinecraftDir, 0700)
 
 	// Get the mcdex directory, create if necessary
-	mcdexDir := filepath.Join(mcDir, "mcdex")
+	mcdexDir := filepath.Join(envData.MinecraftDir, "mcdex")
 	os.Mkdir(mcdexDir, 0700)
 	envData.McdexDir = mcdexDir
 
 	// Figure out where the JVM (and unpack200) commands can be found
-	javaDir := _findJavaDir(mcDir)
+	javaDir := _findJavaDir(envData.MinecraftDir)
 	if javaDir == "" {
 		return fmt.Errorf("missing Java directory")
 	}
