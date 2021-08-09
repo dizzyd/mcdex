@@ -345,3 +345,69 @@ func (db *Database) GetLatestPackURL(slug string) (string, error) {
 	return fmt.Sprintf("https://minecraft.curseforge.com/projects/%d/files/%d/download", pid, fileID), nil
 
 }
+
+type ForEachModHandler func(id int, slug string, description string, downloads int) error
+
+func (db *Database) ForEachMod(mcvsn string, loader string, handler ForEachModHandler) (int, error) {
+	rows, err := db.sqlDb.Query("select projectid, slug, description, downloads from projects where type = ? and modloader = ? and projectid in (select projectid from versions where mcvsn = ?) order by downloads desc",
+		0, loader, mcvsn)
+
+	switch {
+	case err == sql.ErrNoRows:
+		return 0, nil
+	case err != nil:
+		return 0, fmt.Errorf("failed to lookup mods: %+v", err)
+	}
+	defer rows.Close()
+
+	var count int
+
+	for rows.Next() {
+		var projectID, downloads int
+		var slug, description string
+		err = rows.Scan(&projectID, &slug, &description, &downloads)
+		if err != nil {
+			return 0, fmt.Errorf("failed to scan row: %+v", err)
+		}
+
+		count++
+
+		err := handler(projectID, slug, description, downloads)
+		if err != nil {
+			return count, fmt.Errorf("handler failed: %+v", err)
+		}
+	}
+
+	return count, nil
+}
+
+func (db *Database) GetSupportedMCVersions(loader string) ([]string, error) {
+	var query string
+	if loader == "forge" {
+		query = "select distinct(mcvsn) from forge where isrec=1"
+	} else {
+		query = "select distinct(mcversion) from fabric_loaders"
+	}
+
+	rows, err := db.sqlDb.Query(query)
+	switch {
+	case err == sql.ErrNoRows:
+		return []string{}, nil
+	case err != nil:
+		return []string{}, fmt.Errorf("failed to lookup mods: %+v", err)
+	}
+	defer rows.Close()
+
+	var result []string
+	for rows.Next() {
+		var mcvsn string
+		err = rows.Scan(&mcvsn)
+		if err != nil {
+			return []string{}, fmt.Errorf("failed to scan row: %+v", err)
+		}
+
+		result = append(result, mcvsn)
+	}
+
+	return result, nil
+}
