@@ -21,6 +21,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"mcdex/pkg/ui"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,6 +95,12 @@ var gCommands = map[string]command{
 		Desc:      "List most recently updated mods",
 		ArgsCount: 0,
 		Args:      "[<minecraft version>]",
+	},
+	"mod.explore": {
+		Fn: cmdModExplore,
+		Desc: "Explore available mods",
+		ArgsCount: 0,
+		Args: "",
 	},
 	"mod.select": {
 		Fn:        cmdModSelect,
@@ -315,6 +322,19 @@ func cmdModInfo() error {
 	return pkg.PrintCurseForgeModInfo(projectId)
 }
 
+func cmdModExplore() error {
+	db, err := pkg.OpenDatabase()
+	if err != nil {
+		return err
+	}
+
+	explorer, err := ui.NewExplorer(db)
+	if err != nil {
+		return err
+	}
+	return explorer.Run()
+}
+
 func listProjects(ptype int) error {
 	name := flag.Arg(1)
 	mcvsn := flag.Arg(2)
@@ -455,25 +475,8 @@ func usage() {
 	}
 }
 
-type StrValue struct {
-	isSet bool
-	value string
-}
-
-func (v *StrValue) String() string {
-	return v.value
-}
-func (v *StrValue) Set(val string) error {
-	v.isSet = true
-	v.value = val
-	return nil
-}
-
 func main() {
-	mcDir := StrValue{
-		isSet: false,
-		value: pkg.MinecraftDir(),
-	}
+	var mcDir string
 
 	// Look for MultiMC on the path
 	var mmcDir string
@@ -486,7 +489,7 @@ func main() {
 	// Register
 	flag.BoolVar(&ARG_MMC, "mmc", false, "Generate MultiMC instance.cfg when installing a pack")
 	flag.StringVar(&mmcDir, "mmcdir", mmcDir, "Path to directory containing MultiMC executable.")
-	flag.Var(&mcDir, "mcdir", "Minecraft home folder to use. If -mmc is used, will use the value of -mmcdir as the default.")
+	flag.StringVar(&mcDir, "mcdir", "","Minecraft home folder to use. If -mmc is used, will use the value of -mmcdir as the default.")
 	flag.BoolVar(&ARG_VERBOSE, "v", false, "Enable verbose logging of operations")
 	flag.BoolVar(&ARG_SKIPMODS, "skipmods", false, "Skip download of mods when installing a pack")
 	flag.BoolVar(&ARG_DRY_RUN, "n", false, "Dry run; don't save any changes to manifest")
@@ -505,13 +508,13 @@ func main() {
 		if _, err := exec.LookPath(filepath.Join(mmcDir, "MultiMC")); err != nil {
 			log.Fatalf("Invalid MultiMC path specified: %s", mmcDir)
 		}
-		if !mcDir.isSet {
-			_ = mcDir.Set(mmcDir)
+		if mcDir == "" {
+			mcDir = mmcDir
 		}
 	}
 
 	// Initialize our environment
-	err := pkg.InitEnv(mcDir.String(), mmcDir)
+	err := pkg.InitEnv(mcDir, mmcDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize: %s\n", err)
 	}
