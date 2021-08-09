@@ -1,10 +1,10 @@
 
-APPS := mcdex
+APPS := mcdex/cmd/mcdex
 
 VSN := $(shell git describe --long)
 GOVSNFLAG := -ldflags "-X main.version=$(VSN)"
 
-DOCKER_ARGS := -v $(shell pwd)/builds:/builds -w /mcdex mcdex
+DOCKER_ARGS := -v $(shell pwd)/builds:/builds -w /usr/local/go/src/mcdex mcdex
 
 all:
 	go build $(GOVSNFLAG) $(APPS)
