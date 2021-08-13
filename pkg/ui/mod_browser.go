@@ -132,14 +132,18 @@ func (b *ModBrowser) refreshTable() {
 	row := 1
 	printer := message.NewPrinter(language.English)
 
+	b.table.Clear()
+
 	b.table.SetCell(0, 0, tview.NewTableCell("Slug").SetSelectable(false))
 	b.table.SetCell(0, 1, tview.NewTableCell("Downloads").SetSelectable(false))
-	b.table.SetCell(0, 2, tview.NewTableCell("Desc").SetSelectable(false))
+	b.table.SetCell(0, 2, tview.NewTableCell("Loader").SetSelectable(false))
+	b.table.SetCell(0, 3, tview.NewTableCell("Desc").SetSelectable(false))
 
-	b.db.ForEachMod(b.mcvsn, b.loader, func(id int, slug string, description string, downloads int) error {
+	b.db.ForEachMod(b.mcvsn, b.loader, func(id int, slug string, loader string, description string, downloads int) error {
 		b.table.SetCell(row, 0, tview.NewTableCell(slug).SetMaxWidth(25))
 		b.table.SetCell(row, 1, tview.NewTableCell(printer.Sprintf("%d", downloads)))
-		b.table.SetCell(row, 2, tview.NewTableCell(description).SetMaxWidth(150))
+		b.table.SetCell(row, 2, tview.NewTableCell(loader))
+		b.table.SetCell(row, 3, tview.NewTableCell(description).SetMaxWidth(150))
 		row++
 		return nil
 	})
