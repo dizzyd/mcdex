@@ -34,7 +34,7 @@ shell: docker.init
 docker: docker.windows docker.linux
 
 docker.init:
-	docker build -t mcdex -f Dockerfile .
+	docker build --platform linux/amd64 -t mcdex -f Dockerfile .
 
 docker.windows: docker.init
 	docker run $(DOCKER_ARGS) make windows
