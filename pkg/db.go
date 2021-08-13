@@ -346,10 +346,10 @@ func (db *Database) GetLatestPackURL(slug string) (string, error) {
 
 }
 
-type ForEachModHandler func(id int, slug string, description string, downloads int) error
+type ForEachModHandler func(id int, slug string, loader string, description string, downloads int) error
 
 func (db *Database) ForEachMod(mcvsn string, loader string, handler ForEachModHandler) (int, error) {
-	rows, err := db.sqlDb.Query("select projectid, slug, description, downloads from projects where type = ? and modloader = ? and projectid in (select projectid from versions where mcvsn = ?) order by downloads desc",
+	rows, err := db.sqlDb.Query("select projectid, slug, modloader, description, downloads from projects where type = ? and (modloader = ? or modLoader = 'fabric+forge') and projectid in (select projectid from versions where mcvsn = ?) order by downloads desc",
 		0, loader, mcvsn)
 
 	switch {
@@ -364,15 +364,15 @@ func (db *Database) ForEachMod(mcvsn string, loader string, handler ForEachModHa
 
 	for rows.Next() {
 		var projectID, downloads int
-		var slug, description string
-		err = rows.Scan(&projectID, &slug, &description, &downloads)
+		var slug, modloader, description string
+		err = rows.Scan(&projectID, &slug, &modloader, &description, &downloads)
 		if err != nil {
 			return 0, fmt.Errorf("failed to scan row: %+v", err)
 		}
 
 		count++
 
-		err := handler(projectID, slug, description, downloads)
+		err := handler(projectID, slug, modloader, description, downloads)
 		if err != nil {
 			return count, fmt.Errorf("handler failed: %+v", err)
 		}
