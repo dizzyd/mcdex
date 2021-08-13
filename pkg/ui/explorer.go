@@ -19,6 +19,7 @@ type Explorer struct {
 func NewExplorer(db *pkg.Database) (*Explorer, error) {
 	var err error
 	e := &Explorer{db: db, app: tview.NewApplication()}
+	e.app.EnableMouse(false)
 
 	e.modBrowser, err = NewModBrowser(e.app, db)
 	if err != nil {
