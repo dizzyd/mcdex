@@ -31,6 +31,9 @@ type ModBrowser struct {
 	loader string
 	mcvsn string
 
+	orderByField string
+	ascending bool
+
 	onModSelected ModSelectedHandler
 }
 
@@ -50,6 +53,8 @@ func NewModBrowser(app *tview.Application, db *pkg.Database) (*ModBrowser, error
 		db: db,
 		forgeMcVersions: forgeMcVersions,
 		fabricMcVersions: fabricMcVersions,
+		orderByField: "downloads",
+		ascending: false,
 	}
 
 	b.table = tview.NewTable().
@@ -59,6 +64,8 @@ func NewModBrowser(app *tview.Application, db *pkg.Database) (*ModBrowser, error
 		SetEvaluateAllRows(true).
 		SetSelectedFunc(b.modSelected).
 		SetDoneFunc(b.componentDone)
+
+	b.table.SetInputCapture(b.onTableKey)
 
 	b.vsnDropDown = tview.NewDropDown().
 		SetLabel("Version:").
@@ -128,6 +135,21 @@ func (b *ModBrowser) refreshVersions() {
 	b.vsnDropDown.SetCurrentOption(0)
 }
 
+func (b *ModBrowser) onTableKey(event *tcell.EventKey) *tcell.EventKey{
+	if event.Rune() == 'd' {
+		b.orderByField = "downloads"
+		b.ascending = false
+		b.refreshTable()
+		return nil
+	} else if event.Rune() == 'u' {
+		b.orderByField = "modified_ts"
+		b.ascending = false
+		b.refreshTable()
+		return nil
+	}
+	return event
+}
+
 func (b *ModBrowser) refreshTable() {
 	row := 1
 	printer := message.NewPrinter(language.English)
@@ -139,12 +161,13 @@ func (b *ModBrowser) refreshTable() {
 	b.table.SetCell(0, 2, tview.NewTableCell("Loader").SetSelectable(false))
 	b.table.SetCell(0, 3, tview.NewTableCell("Desc").SetSelectable(false))
 
-	b.db.ForEachMod(b.mcvsn, b.loader, func(id int, slug string, loader string, description string, downloads int) error {
-		b.table.SetCell(row, 0, tview.NewTableCell(slug).SetMaxWidth(25))
-		b.table.SetCell(row, 1, tview.NewTableCell(printer.Sprintf("%d", downloads)))
-		b.table.SetCell(row, 2, tview.NewTableCell(loader))
-		b.table.SetCell(row, 3, tview.NewTableCell(description).SetMaxWidth(150))
-		row++
-		return nil
-	})
+	b.db.ForEachMod(b.mcvsn, b.loader, b.orderByField, b.ascending,
+		func(id int, slug string, loader string, description string, downloads int, modifiedTs, createdTs int) error {
+			b.table.SetCell(row, 0, tview.NewTableCell(slug).SetMaxWidth(25))
+			b.table.SetCell(row, 1, tview.NewTableCell(printer.Sprintf("%d", downloads)))
+			b.table.SetCell(row, 2, tview.NewTableCell(loader))
+			b.table.SetCell(row, 3, tview.NewTableCell(description).SetMaxWidth(150))
+			row++
+			return nil
+		})
 }

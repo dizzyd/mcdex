@@ -346,14 +346,21 @@ func (db *Database) GetLatestPackURL(slug string) (string, error) {
 
 }
 
-type ForEachModHandler func(id int, slug string, loader string, description string, downloads int) error
+type ForEachModHandler func(id int, slug string, loader string, description string, downloads int, modified_ts int, created_ts int) error
 
-func (db *Database) ForEachMod(mcvsn string, loader string, handler ForEachModHandler) (int, error) {
-	rows, err := db.sqlDb.Query("select projectid, slug, modloader, description, downloads from projects where type = ? and (modloader = ? or modLoader = 'fabric+forge') and projectid in (select projectid from versions where mcvsn = ?) order by downloads desc",
-		0, loader, mcvsn)
+func (db *Database) ForEachMod(mcvsn string, loader string, orderByField string, ascending bool, handler ForEachModHandler) (int, error) {
+	orderByDirection := "desc"
+	if ascending {
+		orderByDirection = "asc"
+	}
+
+	query := fmt.Sprintf("select projectid, slug, modloader, description, downloads, modified_ts, created_ts from projects where type = %d and (modloader = '%s' or modLoader = 'fabric+forge') and projectid in (select projectid from versions where mcvsn = '%s') order by %s %s",
+		0, loader, mcvsn, orderByField, orderByDirection)
+	rows, err := db.sqlDb.Query(query)
 
 	switch {
 	case err == sql.ErrNoRows:
+		fmt.Printf("No rows returned!\n")
 		return 0, nil
 	case err != nil:
 		return 0, fmt.Errorf("failed to lookup mods: %+v", err)
@@ -363,16 +370,16 @@ func (db *Database) ForEachMod(mcvsn string, loader string, handler ForEachModHa
 	var count int
 
 	for rows.Next() {
-		var projectID, downloads int
+		var projectID, downloads, modified_ts, created_ts int
 		var slug, modloader, description string
-		err = rows.Scan(&projectID, &slug, &modloader, &description, &downloads)
+		err = rows.Scan(&projectID, &slug, &modloader, &description, &downloads, &modified_ts, &created_ts)
 		if err != nil {
 			return 0, fmt.Errorf("failed to scan row: %+v", err)
 		}
 
 		count++
 
-		err := handler(projectID, slug, modloader, description, downloads)
+		err := handler(projectID, slug, modloader, description, downloads, modified_ts, created_ts)
 		if err != nil {
 			return count, fmt.Errorf("handler failed: %+v", err)
 		}
