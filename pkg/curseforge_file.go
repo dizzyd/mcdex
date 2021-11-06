@@ -154,12 +154,22 @@ func (f CurseForgeModFile) toJson() map[string]interface{} {
 }
 
 func (f CurseForgeModFile) getLatestFile(minecraftVersion string, modLoader string) (int, error) {
+	// Setup a retry counter to deal with long timeouts (a recent problem)
+	retryCount := 3
+
 	// Pull the project's descriptor, which has a list of the latest files for each version of Minecraft
-	projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", f.projectID)
-	project, err := getJSONFromURL(projectUrl)
-	if err != nil {
-		return -1, fmt.Errorf("failed to retrieve project for %s: %+v", f.name, err)
-	}
+	retry:
+		projectUrl := fmt.Sprintf("https://addons-ecs.forgesvc.net/api/v2/addon/%d", f.projectID)
+		project, err := getJSONFromURL(projectUrl)
+		if err != nil {
+			if retryCount > 0 {
+				fmt.Printf("Retrying update check for %s (%s)\n", f.name, projectUrl)
+				retryCount -= 1
+				goto retry
+			} else {
+				return -1, fmt.Errorf("failed to retrieve project for %s: %+v", f.name, err)
+			}
+		}
 
 	selectedFileType := math.MaxInt8
 	selectedFileId := 0
