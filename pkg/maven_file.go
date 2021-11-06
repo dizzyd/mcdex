@@ -61,7 +61,7 @@ func (f MavenModFile) install(pack *ModPack) error {
 }
 
 func (f *MavenModFile) update(pack *ModPack) (bool, error) {
-	fmt.Printf("%s is not eligible for update; not yet implemented", f.getName())
+	fmt.Printf("%s is not eligible for update; not yet implemented\n", f.getName())
 	return false, nil
 }
 
