@@ -6,12 +6,12 @@ GOVSNFLAG := -ldflags "-X main.version=$(VSN)"
 
 DOCKER_ARGS := -v $(shell pwd)/builds:/builds -w /mcdex mcdex
 
-deps:
-	go get -u ./cmd/mcdex
-
 all:
 	go build $(GOVSNFLAG) $(APPS)
 	echo $(VSN) > mcdex.latest
+
+deps:
+	go get -u ./cmd/mcdex
 
 clean:
 	rm -rf bin builds
